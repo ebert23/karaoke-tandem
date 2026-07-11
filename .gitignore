@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.venv_check/
+
+# Credenciales — NUNCA subir esto al repo
+backend/credentials.json
+backend/.env
+.env
+
+# Node / Vite
+frontend/node_modules/
+frontend/dist/
+frontend/dev-dist/
+
+# Editor / OS
+.DS_Store
+.vscode/
+
+# Vercel
+.vercel/

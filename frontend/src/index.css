@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-ink-950 text-white font-body antialiased;
+  background-image: theme("backgroundImage.grid-glow");
+  background-attachment: fixed;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: theme("colors.neon.purple");
+  border-radius: 999px;
+}
+
+@layer components {
+  .card {
+    @apply bg-ink-900/80 border border-white/10 rounded-2xl backdrop-blur-sm;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 font-display font-semibold text-sm
+      transition-all duration-150 active:scale-95 disabled:opacity-40 disabled:pointer-events-none;
+  }
+  .btn-primary {
+    @apply btn bg-gradient-to-r from-neon-purple to-neon-pink text-white shadow-neon-sm hover:shadow-neon;
+  }
+  .btn-ghost {
+    @apply btn bg-white/5 text-white border border-white/10 hover:bg-white/10;
+  }
+  .btn-danger {
+    @apply btn bg-red-500/15 text-red-300 border border-red-500/30 hover:bg-red-500/25;
+  }
+  .input {
+    @apply w-full rounded-xl bg-ink-800 border border-white/10 px-4 py-2.5 text-sm placeholder-white/30
+      outline-none focus:border-neon-pink focus:ring-1 focus:ring-neon-pink transition-colors;
+  }
+  .label {
+    @apply text-xs font-semibold uppercase tracking-wide text-white/50 mb-1.5 block;
+  }
+  .chip {
+    @apply px-3 py-1 rounded-full text-xs font-semibold border border-white/10 bg-white/5 text-white/70;
+  }
+  .chip-active {
+    @apply chip bg-gradient-to-r from-neon-purple to-neon-pink border-transparent text-white shadow-neon-sm;
+  }
+  .title-glow {
+    @apply font-display font-extrabold bg-gradient-to-r from-neon-pinklight via-neon-pink to-neon-purple bg-clip-text text-transparent;
+  }
+}

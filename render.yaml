@@ -1,0 +1,26 @@
+# Despliegue en Render (https://render.com) — un único servicio web con Docker.
+# Pasos:
+#   1. Sube este repo a GitHub.
+#   2. En Render: New + → Blueprint → conecta el repo (detecta este render.yaml).
+#   3. Pega GOOGLE_SHEET_ID y GOOGLE_SERVICE_ACCOUNT_JSON cuando lo pida (secretos).
+#   4. Deploy. Tu app quedará en https://karaoketandem-XXXX.onrender.com
+#
+# Ver DEPLOY.md para la guía completa (crear la cuenta de servicio de Google,
+# compartir el Sheet, etc.)
+services:
+  - type: web
+    name: karaoketandem
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: GOOGLE_SHEET_ID
+        sync: false # ID de tu Google Sheet (se pega en el dashboard)
+      - key: GOOGLE_SERVICE_ACCOUNT_JSON
+        sync: false # JSON completo de la cuenta de servicio (secreto)
+      - key: APP_ENV
+        value: production
+      - key: CORS_ORIGINS
+        value: "*"
