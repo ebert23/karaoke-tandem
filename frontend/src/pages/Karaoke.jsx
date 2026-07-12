@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { IconCheck, IconClock, IconPlus, IconSkip } from "../components/Icons.jsx";
+import { IconCheck, IconClock, IconPlus, IconSkip, IconUsers } from "../components/Icons.jsx";
 import { useIdentity } from "../lib/IdentityContext.jsx";
 import { useToast } from "../lib/ToastContext.jsx";
 import { api } from "../lib/api.js";
@@ -38,7 +38,7 @@ function CrearSesion({ onCreada }) {
   return (
     <div className="card p-5 max-w-md mx-auto mt-6">
       <h2 className="title-glow text-xl mb-1">Nueva sesión de karaoke</h2>
-      <p className="text-white/50 text-sm mb-4">Agrega a todos los participantes de esta noche (los demás se pueden unir después con "Unirme").</p>
+      <p className="text-white/50 text-sm mb-4">Agrega a quienes ya sepas que van a cantar hoy — cualquiera del grupo se suma solo en cuanto abre esta pestaña.</p>
       <div className="flex gap-2 mb-3">
         <input
           className="input"
@@ -213,11 +213,20 @@ export default function Karaoke() {
   const [puntuando, setPuntuando] = useState(false);
   const [hayVotos, setHayVotos] = useState(false);
   const [mostrarCola, setMostrarCola] = useState(false);
-  const [uniendose, setUniendose] = useState(false);
 
   async function cargarTodo() {
     try {
-      const s = await api.sesionActiva();
+      let s = await api.sesionActiva();
+      // Cualquiera del grupo que abra esta pestaña con una sesión activa se
+      // suma solo — evita que alguien agregue canciones o vote sin figurar
+      // como participante (antes había que apretar "Unirme" a mano).
+      if (s && !s.participantes.some((p) => p.toLowerCase() === usuario.nombre.toLowerCase())) {
+        try {
+          s = await api.sesionUnirse(s.id_sesion, usuario.nombre);
+        } catch {
+          /* si falla el auto-join seguimos mostrando la sesión igual */
+        }
+      }
       setSesion(s);
       if (s) {
         setTurnos(await api.detalleSesion(s.id_sesion));
@@ -239,19 +248,6 @@ export default function Karaoke() {
   const resueltos = turnos.filter((t) => t.estado !== "En cola");
   const idsUsadas = new Set(turnos.map((t) => t.id_cancion));
   const disponiblesParaCola = canciones.filter((c) => !idsUsadas.has(c.id));
-
-  async function unirme() {
-    setUniendose(true);
-    try {
-      const s = await api.sesionUnirse(sesion.id_sesion, usuario.nombre);
-      setSesion(s);
-      push("¡Te uniste a la sesión! 🎉", "success");
-    } catch (e) {
-      push(e.message, "error");
-    } finally {
-      setUniendose(false);
-    }
-  }
 
   async function agregarACola(idCancion) {
     try {
@@ -323,8 +319,6 @@ export default function Karaoke() {
     );
   }
 
-  const yaSoyParticipante = sesion.participantes.some((p) => p.toLowerCase() === usuario.nombre.toLowerCase());
-
   return (
     <div className="flex flex-col gap-4 max-w-xl mx-auto">
       <div className="flex items-center justify-between">
@@ -333,17 +327,19 @@ export default function Karaoke() {
           Finalizar
         </button>
       </div>
-      <div className="flex flex-wrap gap-1.5 items-center">
+      <div className="card p-3 flex items-center gap-2 flex-wrap">
+        <span className="text-xs text-white/40 flex items-center gap-1 shrink-0">
+          <IconUsers /> {sesion.participantes.length} participando
+        </span>
+        <span className="w-px h-4 bg-white/10 shrink-0" />
         {sesion.participantes.map((p) => (
-          <span key={p} className="chip">
-            {p}
+          <span key={p} className="flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full bg-white/5 border border-white/10">
+            <span className="w-5 h-5 rounded-full bg-gradient-to-br from-neon-purple to-neon-pink flex items-center justify-center font-display font-bold text-[10px] shrink-0">
+              {p[0]?.toUpperCase()}
+            </span>
+            <span className="text-xs font-medium">{p}</span>
           </span>
         ))}
-        {!yaSoyParticipante && (
-          <button onClick={unirme} className="chip-active" disabled={uniendose}>
-            {uniendose ? "Uniendo…" : "+ Unirme"}
-          </button>
-        )}
       </div>
 
       {pendiente ? (
