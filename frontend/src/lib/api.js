@@ -1,6 +1,7 @@
 // Cliente HTTP minimalista para la API de KaraokeTandem.
+import { GRUPO_STORAGE_KEY } from "./storageKeys.js";
+
 const BASE = "/api";
-const GRUPO_STORAGE_KEY = "kt_grupo";
 
 function idGrupoActual() {
   try {

@@ -10,18 +10,38 @@ export default function Grupo() {
   const { usuario } = useIdentity();
   const { push } = useToast();
   const [detalle, setDetalle] = useState(null);
+  const [errorCarga, setErrorCarga] = useState(false);
+  const [intentos, setIntentos] = useState(0);
   const [ocupado, setOcupado] = useState(""); // id del miembro con una acción en curso
 
   const esAdmin = grupo.admins?.includes(usuario.id) ?? false;
   const linkInvitacion = `${window.location.origin}${window.location.pathname}#/?codigo=${grupo.codigo}`;
 
   useEffect(() => {
+    let cancelado = false;
+    setErrorCarga(false);
     api
       .grupoActual(grupo.id)
-      .then(setDetalle)
-      .catch((e) => push(e.message, "error"));
+      .then((d) => {
+        if (!cancelado) setDetalle(d);
+      })
+      .catch((e) => {
+        if (cancelado) return;
+        if (intentos === 0) {
+          // Primer intento fallido: puede ser un arranque en frío del
+          // backend o un pico de la cuota de Sheets — reintentamos una vez
+          // en silencio antes de pedirle al usuario que lo haga a mano.
+          setTimeout(() => !cancelado && setIntentos((n) => n + 1), 1500);
+        } else {
+          push(e.message, "error");
+          setErrorCarga(true);
+        }
+      });
+    return () => {
+      cancelado = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [grupo.id]);
+  }, [grupo.id, intentos]);
 
   function aplicarDetalle(nuevoDetalle) {
     setDetalle(nuevoDetalle);
@@ -148,7 +168,16 @@ export default function Grupo() {
           <IconUsers /> Miembros ({detalle?.miembros?.length ?? "…"})
         </p>
         {!detalle ? (
-          <p className="text-white/40 text-sm text-center py-4">Cargando…</p>
+          errorCarga ? (
+            <div className="text-center py-4">
+              <p className="text-white/40 text-sm mb-2">No se pudo cargar. Puede ser un pico de tráfico en la base de datos.</p>
+              <button onClick={() => setIntentos((n) => n + 1)} className="btn-ghost !text-xs">
+                Reintentar
+              </button>
+            </div>
+          ) : (
+            <p className="text-white/40 text-sm text-center py-4">Cargando…</p>
+          )
         ) : detalle.miembros.length === 0 ? (
           <p className="text-white/40 text-sm text-center py-4">Todavía no hay miembros.</p>
         ) : (

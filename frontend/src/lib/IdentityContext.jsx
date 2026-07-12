@@ -1,18 +1,15 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { useGroup } from "./GroupContext.jsx";
 import { api } from "./api.js";
+import { usuarioStorageKey } from "./storageKeys.js";
 
 const IdentityContext = createContext(null);
-
-function storageKey(idGrupo) {
-  return `kt_usuario_${idGrupo}`;
-}
 
 export function IdentityProvider({ children }) {
   const { grupo } = useGroup();
   const [usuario, setUsuario] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem(storageKey(grupo.id)) || "null");
+      return JSON.parse(localStorage.getItem(usuarioStorageKey(grupo.id)) || "null");
     } catch {
       return null;
     }
@@ -21,7 +18,7 @@ export function IdentityProvider({ children }) {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (usuario) localStorage.setItem(storageKey(grupo.id), JSON.stringify(usuario));
+    if (usuario) localStorage.setItem(usuarioStorageKey(grupo.id), JSON.stringify(usuario));
   }, [usuario, grupo.id]);
 
   async function ingresar(nombre) {
@@ -40,7 +37,7 @@ export function IdentityProvider({ children }) {
   }
 
   function salir() {
-    localStorage.removeItem(storageKey(grupo.id));
+    localStorage.removeItem(usuarioStorageKey(grupo.id));
     setUsuario(null);
   }
 

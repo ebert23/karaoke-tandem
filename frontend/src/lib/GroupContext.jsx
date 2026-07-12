@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { api } from "./api.js";
+import { GRUPO_STORAGE_KEY as STORAGE_KEY, usuarioStorageKey } from "./storageKeys.js";
 
-const STORAGE_KEY = "kt_grupo";
 const GroupContext = createContext(null);
 
 export function GroupProvider({ children }) {
@@ -19,12 +19,33 @@ export function GroupProvider({ children }) {
     if (grupo) localStorage.setItem(STORAGE_KEY, JSON.stringify(grupo));
   }, [grupo]);
 
+  // Escribe localStorage ya mismo (no solo vía el useEffect de abajo): el
+  // efecto corre recién después del próximo render, y api.js lee
+  // X-Grupo-Id directo de localStorage — cualquier request hecho entre el
+  // setGrupo() y ese render (p.ej. loginOCrear justo después de crear el
+  // grupo) saldría sin el header y fallaría con 422.
+  function guardarGrupo(g) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(g));
+    setGrupo(g);
+  }
+
   async function crearGrupo(nombre, creadoPorNombre, foto = "") {
     setLoading(true);
     setError("");
     try {
       const g = await api.crearGrupo(nombre, foto, creadoPorNombre);
-      setGrupo(g);
+      if (creadoPorNombre.trim()) {
+        // El backend ya crea (y hace admin) a este usuario al crear el
+        // grupo. Lo dejamos identificado de una para no volver a pedirle
+        // el nombre en IdentityGate — pero hay que escribirlo en
+        // localStorage ANTES de guardarGrupo()/setGrupo(), porque eso es
+        // justo lo que dispara el montaje de IdentityProvider (que lee el
+        // usuario de storage una sola vez, al montar).
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(g));
+        const u = await api.loginOCrear(creadoPorNombre.trim());
+        localStorage.setItem(usuarioStorageKey(g.id), JSON.stringify(u));
+      }
+      guardarGrupo(g);
       return g;
     } catch (e) {
       setError(e.message || "No se pudo crear el grupo.");
@@ -39,7 +60,7 @@ export function GroupProvider({ children }) {
     setError("");
     try {
       const g = await api.unirseGrupo(codigo);
-      setGrupo(g);
+      guardarGrupo(g);
       return g;
     } catch (e) {
       setError(e.message || "Código inválido.");

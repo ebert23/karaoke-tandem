@@ -7,6 +7,26 @@ import { api } from "../lib/api.js";
 
 const GENEROS_SUGERIDOS = ["Pop", "Rock", "Reggaetón", "Balada", "Cumbia", "Banda", "R&B", "Rap"];
 
+// YouTube no expone "artista" en la búsqueda; muchos videos de karaoke
+// siguen la convención "Artista - Título (Karaoke)", así que la
+// aproximamos separando por guion y limpiando sufijos típicos. Es una
+// suposición razonable, no una garantía — igual queda editable a mano.
+function parseResultadoYoutube(r) {
+  let titulo = r.titulo;
+  let artista = "";
+  const partes = titulo.split(/\s+[-–—]\s+/);
+  if (partes.length >= 2) {
+    artista = partes[0].trim();
+    titulo = partes.slice(1).join(" - ").trim();
+  }
+  titulo = titulo
+    .replace(/[([]\s*(karaoke|versi[oó]n karaoke|lyrics?|letra|official\s*(video|audio|music video)?|hd|4k|remaster(ed)?(\s*\d{4})?)\s*[)\]]/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/[-–—\s]+$/, "")
+    .trim();
+  return { titulo, artista, link_youtube: r.link_youtube };
+}
+
 function EditarCancionForm({ cancion, onGuardar, onCancelar, guardando }) {
   const [form, setForm] = useState({
     titulo: cancion.titulo,
@@ -374,7 +394,10 @@ export default function Semana() {
       {showForm && (
         <form onSubmit={agregar} className="card p-4 grid sm:grid-cols-2 gap-3">
           <BuscadorYoutube
-            onElegir={(r) => setForm((f) => ({ ...f, titulo: r.titulo, link_youtube: r.link_youtube }))}
+            onElegir={(r) => {
+              const { titulo, artista, link_youtube } = parseResultadoYoutube(r);
+              setForm((f) => ({ ...f, titulo, artista: artista || f.artista, link_youtube }));
+            }}
           />
           <div>
             <label className="label">Título</label>
