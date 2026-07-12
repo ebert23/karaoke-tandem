@@ -23,7 +23,7 @@ export default defineConfig({
       },
       workbox: {
         // Cachea el shell de la app (JS/CSS/HTML) para que abra offline.
-        globPatterns: ["**/*.{js,css,html,svg,woff2}"],
+        globPatterns: ["**/*.{js,css,html,svg,webp,woff2}"],
         runtimeCaching: [
           {
             // Lecturas GET a la API: red primero, y si no hay conexión usa el cache.
