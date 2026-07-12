@@ -13,6 +13,7 @@ export default function Grupo() {
   const [ocupado, setOcupado] = useState(""); // id del miembro con una acción en curso
 
   const esAdmin = grupo.admins?.includes(usuario.id) ?? false;
+  const linkInvitacion = `${window.location.origin}${window.location.pathname}#/?codigo=${grupo.codigo}`;
 
   useEffect(() => {
     api
@@ -30,26 +31,41 @@ export default function Grupo() {
     setGrupo({ ...grupo, admins: nuevoDetalle.admins });
   }
 
-  async function copiarCodigo() {
+  async function copiarLink() {
     try {
-      await navigator.clipboard.writeText(grupo.codigo);
-      push("Código copiado 📋", "success");
+      await navigator.clipboard.writeText(linkInvitacion);
+      push("Link copiado — pegalo donde quieras 📋", "success");
     } catch {
-      push("No se pudo copiar. Copialo a mano: " + grupo.codigo, "error");
+      push("No se pudo copiar. Compartí el código a mano: " + grupo.codigo, "error");
     }
   }
 
-  const textoInvitacion = `¡Únete a "${grupo.nombre}" en KaraokeTandem! Código: ${grupo.codigo}`;
+  // El link lleva directo a la sala (auto-join al abrirlo); el código queda
+  // como respaldo por si a alguien no le abre el link.
+  const textoInvitacion = `¡Únete a "${grupo.nombre}" en KaraokeTandem! 🎤\n${linkInvitacion}\n(o con el código ${grupo.codigo})`;
 
   async function compartir() {
     if (navigator.share) {
       try {
-        await navigator.share({ title: "KaraokeTandem", text: textoInvitacion });
+        await navigator.share({ title: "KaraokeTandem", text: textoInvitacion, url: linkInvitacion });
       } catch {
         /* usuario canceló el share */
       }
     } else {
-      copiarCodigo();
+      copiarLink();
+    }
+  }
+
+  async function reclamarAdmin() {
+    setOcupado("__reclamar__");
+    try {
+      const nuevoDetalle = await api.reclamarAdmin(grupo.id, usuario.id);
+      aplicarDetalle(nuevoDetalle);
+      push("¡Ahora sos admin del grupo! 👑", "success");
+    } catch (e) {
+      push(e.message, "error");
+    } finally {
+      setOcupado("");
     }
   }
 
@@ -95,9 +111,12 @@ export default function Grupo() {
       <div className="card p-5 text-center">
         <p className="label mb-2">Código de invitación</p>
         <p className="font-display font-extrabold text-4xl tracking-[0.3em] mb-4">{grupo.codigo}</p>
+        <p className="text-xs text-white/40 mb-3 -mt-2">
+          Compartí el link y quien lo abra entra directo a la sala, sin escribir el código.
+        </p>
         <div className="flex gap-2 justify-center flex-wrap">
-          <button onClick={copiarCodigo} className="btn-ghost">
-            <IconCopy /> Copiar
+          <button onClick={copiarLink} className="btn-ghost">
+            <IconCopy /> Copiar link
           </button>
           <a
             href={`https://wa.me/?text=${encodeURIComponent(textoInvitacion)}`}
@@ -112,6 +131,17 @@ export default function Grupo() {
           </button>
         </div>
       </div>
+
+      {detalle && detalle.admins.length === 0 && (
+        <div className="card p-4 border-amber-400/30 bg-amber-400/5 flex items-center justify-between gap-3 flex-wrap">
+          <p className="text-sm text-amber-200/90">
+            <IconCrown className="inline mb-0.5" /> Este grupo todavía no tiene ningún admin.
+          </p>
+          <button onClick={reclamarAdmin} disabled={ocupado === "__reclamar__"} className="btn-primary !text-xs !py-1.5 shrink-0">
+            {ocupado === "__reclamar__" ? "Un momento…" : "Ser el primer admin"}
+          </button>
+        </div>
+      )}
 
       <div className="card p-4">
         <p className="label mb-3 flex items-center gap-1.5">

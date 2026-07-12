@@ -1,7 +1,14 @@
 """Endpoints de Grupos/Salas: crear, unirse por código, detalle + miembros."""
 from fastapi import APIRouter, HTTPException
 
-from ..schemas import GrupoCreate, GrupoDetalleOut, GrupoOut, GrupoUnirseRequest, MiembroAccionRequest
+from ..schemas import (
+    GrupoCreate,
+    GrupoDetalleOut,
+    GrupoOut,
+    GrupoUnirseRequest,
+    MiembroAccionRequest,
+    ReclamarAdminRequest,
+)
 from ..services import grupos as svc
 from ..services import usuarios as usuarios_svc
 
@@ -28,6 +35,16 @@ def obtener(id_grupo: str):
         raise HTTPException(404, "Grupo no encontrado")
     grupo["miembros"] = usuarios_svc.listar(id_grupo)
     return grupo
+
+
+@router.post("/{id_grupo}/reclamar-admin", response_model=GrupoDetalleOut)
+def reclamar_admin(id_grupo: str, data: ReclamarAdminRequest):
+    try:
+        return svc.reclamar_admin(id_grupo, data.id_usuario)
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+    except ValueError as e:
+        raise HTTPException(404, str(e))
 
 
 @router.post("/{id_grupo}/miembros/{id_usuario}/admin", response_model=GrupoDetalleOut)

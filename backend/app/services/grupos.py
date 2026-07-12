@@ -71,6 +71,25 @@ def es_admin(grupo: dict, id_usuario: str) -> bool:
     return id_usuario in grupo["admins"]
 
 
+def reclamar_admin(id_grupo: str, id_usuario: str) -> dict:
+    """Válvula de escape para grupos sin ningún admin (p.ej. uno migrado de
+    antes de que existiera este rol): el primer miembro que la pide se
+    convierte en admin. Deja de estar disponible en cuanto el grupo ya
+    tiene un admin."""
+    row_number, row = _table().get_by_id("ID", id_grupo)
+    if row_number is None:
+        raise ValueError("Grupo no encontrado")
+    grupo = _row_to_out(row)
+    if grupo["admins"]:
+        raise PermissionError("Este grupo ya tiene un admin; pedile que te otorgue el rol")
+    if usuarios_svc.get_por_id(id_grupo, id_usuario) is None:
+        raise ValueError("Usuario no encontrado en este grupo")
+    _table().update_row(row_number, {"Admins": id_usuario})
+    grupo["admins"] = [id_usuario]
+    grupo["miembros"] = usuarios_svc.listar(id_grupo)
+    return grupo
+
+
 def hacer_admin(id_grupo: str, id_usuario_actor: str, id_usuario_objetivo: str) -> dict:
     row_number, row = _table().get_by_id("ID", id_grupo)
     if row_number is None:

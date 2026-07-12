@@ -49,6 +49,7 @@ export const api = {
   crearGrupo: (nombre, foto, creadoPorNombre) => post("/grupos", { nombre, foto, creado_por_nombre: creadoPorNombre }),
   unirseGrupo: (codigo) => post("/grupos/unirse", { codigo }),
   grupoActual: (idGrupo) => get(`/grupos/${idGrupo}`),
+  reclamarAdmin: (idGrupo, idUsuario) => post(`/grupos/${idGrupo}/reclamar-admin`, { id_usuario: idUsuario }),
   hacerAdmin: (idGrupo, idUsuarioObjetivo, idUsuarioActor) =>
     post(`/grupos/${idGrupo}/miembros/${idUsuarioObjetivo}/admin`, { id_usuario_actor: idUsuarioActor }),
   quitarAdmin: (idGrupo, idUsuarioObjetivo, idUsuarioActor) =>

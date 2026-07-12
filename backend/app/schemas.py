@@ -32,6 +32,10 @@ class MiembroAccionRequest(BaseModel):
     id_usuario_actor: str
 
 
+class ReclamarAdminRequest(BaseModel):
+    id_usuario: str
+
+
 # --- Canciones ---
 class CancionCreate(BaseModel):
     titulo: str = Field(min_length=1, max_length=200)
