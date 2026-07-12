@@ -8,7 +8,10 @@ import { formatCantantes } from "../lib/format.js";
 
 const TIMER_INICIAL = 240; // 4 minutos
 const NOTIF_STORAGE_KEY = "kt_notif_enabled";
-const POLL_MS = 6000;
+// 15s: la app ya viene rozando la cuota de lecturas de Google Sheets, así
+// que este sondeo (uno por pestaña de Karaoke abierta) va más despacio que
+// el de votación en vivo (4s) para no sumar presión extra.
+const POLL_MS = 15000;
 
 function cantantesDeTurno(t) {
   return (t.cantada_por || "")
