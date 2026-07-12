@@ -4,6 +4,8 @@ import csv
 import io
 
 from ..sheets_client import SUGERENCIAS_POR_GENERO, SheetTable
+from . import grupos as grupos_svc
+from . import usuarios as usuarios_svc
 from .ids import new_id, now_iso
 
 
@@ -102,6 +104,47 @@ def crear(id_grupo: str, data) -> dict:
     }
     _table().append(row)
     return _row_to_out(row, {}, set(), None)
+
+
+def _verificar_permiso(id_grupo: str, cancion_row: dict, id_usuario: str) -> None:
+    """Solo quien agregó la canción (por nombre, igual que el resto de la app
+    identifica "de quién es" algo) o un admin del grupo puede editarla/borrarla."""
+    usuario = usuarios_svc.get_por_id(id_grupo, id_usuario)
+    if not usuario:
+        raise PermissionError("Usuario no encontrado en este grupo")
+    es_autor = cancion_row["Agregado por"].strip().lower() == usuario["nombre"].strip().lower()
+    if es_autor:
+        return
+    grupo = grupos_svc.get_por_id(id_grupo)
+    if grupo and id_usuario in grupo["admins"]:
+        return
+    raise PermissionError("Solo quien agregó esta canción o un admin del grupo puede modificarla")
+
+
+def actualizar(id_grupo: str, id_cancion: str, id_usuario: str, data) -> dict:
+    tabla = _table()
+    row_number, row = tabla.get_by_id("ID", id_cancion)
+    if row_number is None or row["ID Grupo"] != id_grupo:
+        raise ValueError("Canción no encontrada")
+    _verificar_permiso(id_grupo, row, id_usuario)
+    updates = {
+        "Título": data.titulo.strip(),
+        "Artista": data.artista.strip(),
+        "Género": data.genero.strip(),
+        "Link YouTube": data.link_youtube.strip(),
+    }
+    tabla.update_row(row_number, updates)
+    row.update(updates)
+    return _row_to_out(row, {}, set(), id_usuario)
+
+
+def eliminar(id_grupo: str, id_cancion: str, id_usuario: str) -> None:
+    tabla = _table()
+    row_number, row = tabla.get_by_id("ID", id_cancion)
+    if row_number is None or row["ID Grupo"] != id_grupo:
+        raise ValueError("Canción no encontrada")
+    _verificar_permiso(id_grupo, row, id_usuario)
+    tabla.delete_row(row_number)
 
 
 def votar(id_grupo: str, id_cancion: str, id_usuario: str) -> dict:

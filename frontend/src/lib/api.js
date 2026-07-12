@@ -36,6 +36,8 @@ async function request(path, options = {}) {
 
 const get = (path) => request(path);
 const post = (path, body) => request(path, { method: "POST", body: JSON.stringify(body ?? {}) });
+const put = (path, body) => request(path, { method: "PUT", body: JSON.stringify(body ?? {}) });
+const del = (path, body) => request(path, { method: "DELETE", body: JSON.stringify(body ?? {}) });
 
 function qs(params = {}) {
   const s = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== ""));
@@ -47,6 +49,12 @@ export const api = {
   crearGrupo: (nombre, foto, creadoPorNombre) => post("/grupos", { nombre, foto, creado_por_nombre: creadoPorNombre }),
   unirseGrupo: (codigo) => post("/grupos/unirse", { codigo }),
   grupoActual: (idGrupo) => get(`/grupos/${idGrupo}`),
+  hacerAdmin: (idGrupo, idUsuarioObjetivo, idUsuarioActor) =>
+    post(`/grupos/${idGrupo}/miembros/${idUsuarioObjetivo}/admin`, { id_usuario_actor: idUsuarioActor }),
+  quitarAdmin: (idGrupo, idUsuarioObjetivo, idUsuarioActor) =>
+    del(`/grupos/${idGrupo}/miembros/${idUsuarioObjetivo}/admin`, { id_usuario_actor: idUsuarioActor }),
+  expulsarMiembro: (idGrupo, idUsuarioObjetivo, idUsuarioActor) =>
+    del(`/grupos/${idGrupo}/miembros/${idUsuarioObjetivo}`, { id_usuario_actor: idUsuarioActor }),
 
   // Usuarios
   loginOCrear: (nombre, foto = "") => post("/usuarios", { nombre, foto }),
@@ -56,6 +64,8 @@ export const api = {
   canciones: (params = {}) => get(`/canciones${qs(params)}`),
   top10: (idUsuario) => get(`/canciones/top10${qs({ id_usuario: idUsuario })}`),
   agregarCancion: (data) => post("/canciones", data),
+  editarCancion: (idCancion, data, idUsuario) => put(`/canciones/${idCancion}`, { ...data, id_usuario: idUsuario }),
+  eliminarCancion: (idCancion, idUsuario) => del(`/canciones/${idCancion}`, { id_usuario: idUsuario }),
   votarCancion: (idCancion, idUsuario) => post(`/canciones/${idCancion}/votar`, { id_usuario: idUsuario }),
   favoritoToggle: (idCancion, idUsuario) => post(`/canciones/${idCancion}/favorito`, { id_usuario: idUsuario }),
   sugerencias: (genero) => get(`/canciones/sugerencias${qs({ genero })}`),

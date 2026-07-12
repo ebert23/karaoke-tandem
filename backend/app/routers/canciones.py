@@ -3,7 +3,7 @@ sugerencias, búsqueda en YouTube y export CSV."""
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..deps import get_grupo_id
-from ..schemas import CancionCreate, CancionOut, FavoritoRequest, SugerenciaOut, VotoRequest
+from ..schemas import CancionCreate, CancionOut, CancionUpdate, FavoritoRequest, SugerenciaOut, VotoRequest
 from ..services import canciones as svc
 
 router = APIRouter(prefix="/api/canciones", tags=["canciones"])
@@ -43,6 +43,27 @@ def exportar_csv(id_grupo: str = Depends(get_grupo_id)):
 @router.post("", response_model=CancionOut)
 def crear(data: CancionCreate, id_grupo: str = Depends(get_grupo_id)):
     return svc.crear(id_grupo, data)
+
+
+@router.put("/{id_cancion}", response_model=CancionOut)
+def actualizar(id_cancion: str, data: CancionUpdate, id_grupo: str = Depends(get_grupo_id)):
+    try:
+        return svc.actualizar(id_grupo, id_cancion, data.id_usuario, data)
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
+@router.delete("/{id_cancion}")
+def eliminar(id_cancion: str, data: VotoRequest, id_grupo: str = Depends(get_grupo_id)):
+    try:
+        svc.eliminar(id_grupo, id_cancion, data.id_usuario)
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    return {"ok": True}
 
 
 @router.post("/{id_cancion}/votar", response_model=CancionOut)

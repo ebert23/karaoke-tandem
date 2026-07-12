@@ -26,6 +26,12 @@ class GrupoDetalleOut(GrupoOut):
     miembros: list["UsuarioOut"] = []
 
 
+class MiembroAccionRequest(BaseModel):
+    # Quien ejecuta la acción (debe ser admin del grupo) — se verifica en el
+    # servicio, igual que id_usuario en VotoRequest/FavoritoRequest.
+    id_usuario_actor: str
+
+
 # --- Canciones ---
 class CancionCreate(BaseModel):
     titulo: str = Field(min_length=1, max_length=200)
@@ -47,6 +53,15 @@ class CancionOut(BaseModel):
     veces_cantada: int
     ya_voto: bool = False
     es_favorita: bool = False
+
+
+class CancionUpdate(BaseModel):
+    titulo: str = Field(min_length=1, max_length=200)
+    artista: str = Field(min_length=1, max_length=200)
+    genero: str = Field(min_length=1, max_length=60)
+    link_youtube: str = ""
+    # Quien pide el cambio — se verifica que sea el autor o un admin.
+    id_usuario: str
 
 
 class VotoRequest(BaseModel):

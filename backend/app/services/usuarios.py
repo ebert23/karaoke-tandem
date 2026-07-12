@@ -59,6 +59,14 @@ def sumar_puntos(id_usuario: str, puntos: int) -> None:
     tabla.update_row(row_number, {"Puntos totales": nuevo_total})
 
 
+def eliminar(id_grupo: str, id_usuario: str) -> None:
+    tabla = _table()
+    row_number, row = tabla.get_by_id("ID", id_usuario)
+    if row_number is None or row["ID Grupo"] != id_grupo:
+        raise ValueError("Usuario no encontrado en este grupo")
+    tabla.delete_row(row_number)
+
+
 def incrementar_sesiones(id_usuario: str) -> None:
     tabla = _table()
     row_number, row = tabla.get_by_id("ID", id_usuario)

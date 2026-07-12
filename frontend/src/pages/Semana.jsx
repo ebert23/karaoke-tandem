@@ -1,12 +1,77 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { IconHeart, IconPlus, IconSearch, IconSparkles, IconStar } from "../components/Icons.jsx";
+import { IconEdit, IconHeart, IconPlus, IconSearch, IconSparkles, IconStar, IconTrash } from "../components/Icons.jsx";
+import { useGroup } from "../lib/GroupContext.jsx";
 import { useIdentity } from "../lib/IdentityContext.jsx";
 import { useToast } from "../lib/ToastContext.jsx";
 import { api } from "../lib/api.js";
 
 const GENEROS_SUGERIDOS = ["Pop", "Rock", "Reggaetón", "Balada", "Cumbia", "Banda", "R&B", "Rap"];
 
-function SongCard({ cancion, onVotar, onFavorito }) {
+function EditarCancionForm({ cancion, onGuardar, onCancelar, guardando }) {
+  const [form, setForm] = useState({
+    titulo: cancion.titulo,
+    artista: cancion.artista,
+    genero: cancion.genero,
+    link_youtube: cancion.link_youtube,
+  });
+
+  function submit(e) {
+    e.preventDefault();
+    if (!form.titulo.trim() || !form.artista.trim() || !form.genero.trim()) return;
+    onGuardar(form);
+  }
+
+  return (
+    <form onSubmit={submit} className="card p-4 grid sm:grid-cols-2 gap-3">
+      <div>
+        <label className="label">Título</label>
+        <input className="input" value={form.titulo} onChange={(e) => setForm({ ...form, titulo: e.target.value })} maxLength={200} required />
+      </div>
+      <div>
+        <label className="label">Artista</label>
+        <input className="input" value={form.artista} onChange={(e) => setForm({ ...form, artista: e.target.value })} maxLength={200} required />
+      </div>
+      <div>
+        <label className="label">Género</label>
+        <input className="input" value={form.genero} onChange={(e) => setForm({ ...form, genero: e.target.value })} required />
+      </div>
+      <div>
+        <label className="label">Link de YouTube (opcional)</label>
+        <input className="input" type="url" value={form.link_youtube} onChange={(e) => setForm({ ...form, link_youtube: e.target.value })} />
+      </div>
+      <div className="sm:col-span-2 flex justify-end gap-2 mt-1">
+        <button type="button" className="btn-ghost" onClick={onCancelar}>
+          Cancelar
+        </button>
+        <button className="btn-primary" disabled={guardando}>
+          {guardando ? "Guardando…" : "Guardar cambios"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function SongCard({ cancion, puedeEditar, onVotar, onFavorito, onEditar, onEliminar }) {
+  const [editando, setEditando] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [eliminando, setEliminando] = useState(false);
+
+  if (editando) {
+    return (
+      <EditarCancionForm
+        cancion={cancion}
+        guardando={guardando}
+        onCancelar={() => setEditando(false)}
+        onGuardar={async (data) => {
+          setGuardando(true);
+          const ok = await onEditar(cancion.id, data);
+          setGuardando(false);
+          if (ok) setEditando(false);
+        }}
+      />
+    );
+  }
+
   return (
     <div className="card p-4 flex items-center gap-3">
       <div className="flex-1 min-w-0">
@@ -18,6 +83,25 @@ function SongCard({ cancion, onVotar, onFavorito }) {
           <span className="text-xs text-white/30">por {cancion.agregado_por}</span>
         </div>
       </div>
+      {puedeEditar && (
+        <div className="flex items-center gap-1 shrink-0">
+          <button onClick={() => setEditando(true)} className="btn-ghost !px-2 !py-2 !text-white/50" title="Editar">
+            <IconEdit />
+          </button>
+          <button
+            onClick={async () => {
+              if (!confirm(`¿Eliminar "${cancion.titulo}"? Se perderán sus votos y no se puede deshacer.`)) return;
+              setEliminando(true);
+              await onEliminar(cancion.id);
+            }}
+            disabled={eliminando}
+            className="btn-ghost !px-2 !py-2 !text-red-300/70 hover:!text-red-300"
+            title="Eliminar"
+          >
+            <IconTrash />
+          </button>
+        </div>
+      )}
       {cancion.link_youtube && (
         <a
           href={cancion.link_youtube}
@@ -168,7 +252,9 @@ function SugerenciasGenero({ genero, onElegir }) {
 
 export default function Semana() {
   const { usuario } = useIdentity();
+  const { grupo } = useGroup();
   const { push } = useToast();
+  const esAdmin = grupo.admins?.includes(usuario.id) ?? false;
   const [canciones, setCanciones] = useState([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
@@ -229,6 +315,28 @@ export default function Semana() {
     } catch (e) {
       push(e.message, "error");
       cargar();
+    }
+  }
+
+  async function editar(id, data) {
+    try {
+      const actualizada = await api.editarCancion(id, data, usuario.id);
+      setCanciones((prev) => prev.map((c) => (c.id === id ? { ...c, ...actualizada } : c)));
+      push("Canción actualizada ✏️", "success");
+      return true;
+    } catch (e) {
+      push(e.message, "error");
+      return false;
+    }
+  }
+
+  async function eliminar(id) {
+    try {
+      await api.eliminarCancion(id, usuario.id);
+      setCanciones((prev) => prev.filter((c) => c.id !== id));
+      push("Canción eliminada 🗑️", "success");
+    } catch (e) {
+      push(e.message, "error");
     }
   }
 
@@ -337,7 +445,15 @@ export default function Semana() {
       ) : (
         <div className="flex flex-col gap-2.5">
           {canciones.map((c) => (
-            <SongCard key={c.id} cancion={c} onVotar={votar} onFavorito={favorito} />
+            <SongCard
+              key={c.id}
+              cancion={c}
+              puedeEditar={esAdmin || c.agregado_por.toLowerCase() === usuario.nombre.toLowerCase()}
+              onVotar={votar}
+              onFavorito={favorito}
+              onEditar={editar}
+              onEliminar={eliminar}
+            />
           ))}
         </div>
       )}

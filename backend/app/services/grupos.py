@@ -65,3 +65,54 @@ def unirse_por_codigo(codigo: str) -> dict | None:
 def get_por_id(id_grupo: str) -> dict | None:
     _, row = _table().get_by_id("ID", id_grupo)
     return _row_to_out(row) if row else None
+
+
+def es_admin(grupo: dict, id_usuario: str) -> bool:
+    return id_usuario in grupo["admins"]
+
+
+def hacer_admin(id_grupo: str, id_usuario_actor: str, id_usuario_objetivo: str) -> dict:
+    row_number, row = _table().get_by_id("ID", id_grupo)
+    if row_number is None:
+        raise ValueError("Grupo no encontrado")
+    grupo = _row_to_out(row)
+    if not es_admin(grupo, id_usuario_actor):
+        raise PermissionError("Solo un admin puede otorgar el rol de admin")
+    if usuarios_svc.get_por_id(id_grupo, id_usuario_objetivo) is None:
+        raise ValueError("Usuario no encontrado en este grupo")
+    if id_usuario_objetivo not in grupo["admins"]:
+        nuevos_admins = grupo["admins"] + [id_usuario_objetivo]
+        _table().update_row(row_number, {"Admins": ",".join(nuevos_admins)})
+        grupo["admins"] = nuevos_admins
+    grupo["miembros"] = usuarios_svc.listar(id_grupo)
+    return grupo
+
+
+def quitar_admin(id_grupo: str, id_usuario_actor: str, id_usuario_objetivo: str) -> dict:
+    row_number, row = _table().get_by_id("ID", id_grupo)
+    if row_number is None:
+        raise ValueError("Grupo no encontrado")
+    grupo = _row_to_out(row)
+    if not es_admin(grupo, id_usuario_actor):
+        raise PermissionError("Solo un admin puede quitar el rol de admin")
+    if id_usuario_objetivo in grupo["admins"]:
+        if len(grupo["admins"]) == 1:
+            raise ValueError("No podés quitar al último admin del grupo")
+        nuevos_admins = [a for a in grupo["admins"] if a != id_usuario_objetivo]
+        _table().update_row(row_number, {"Admins": ",".join(nuevos_admins)})
+        grupo["admins"] = nuevos_admins
+    grupo["miembros"] = usuarios_svc.listar(id_grupo)
+    return grupo
+
+
+def expulsar_miembro(id_grupo: str, id_usuario_actor: str, id_usuario_objetivo: str) -> dict:
+    grupo = get_por_id(id_grupo)
+    if grupo is None:
+        raise ValueError("Grupo no encontrado")
+    if not es_admin(grupo, id_usuario_actor):
+        raise PermissionError("Solo un admin puede expulsar miembros")
+    if id_usuario_objetivo in grupo["admins"]:
+        raise ValueError("No podés expulsar a otro admin; primero quitale el rol de admin")
+    usuarios_svc.eliminar(id_grupo, id_usuario_objetivo)
+    grupo["miembros"] = usuarios_svc.listar(id_grupo)
+    return grupo

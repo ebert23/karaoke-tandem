@@ -134,3 +134,30 @@ export const IconBell = (p) => (
     <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
   </svg>
 );
+export const IconEdit = (p) => (
+  <svg viewBox="0 0 24 24" width={16} height={16} {...base} {...p}>
+    <path d="M12 20h9" />
+    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+  </svg>
+);
+export const IconTrash = (p) => (
+  <svg viewBox="0 0 24 24" width={16} height={16} {...base} {...p}>
+    <path d="M3 6h18" />
+    <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+    <line x1="10" y1="11" x2="10" y2="17" />
+    <line x1="14" y1="11" x2="14" y2="17" />
+  </svg>
+);
+export const IconCrown = (p) => (
+  <svg viewBox="0 0 24 24" width={14} height={14} {...base} {...p}>
+    <path d="M3 8l4 3 5-6 5 6 4-3-2 11H5L3 8Z" />
+    <line x1="5" y1="21" x2="19" y2="21" />
+  </svg>
+);
+export const IconWhatsapp = (p) => (
+  <svg viewBox="0 0 24 24" width={18} height={18} {...base} {...p}>
+    <path d="M4 20l1.4-4.2A8 8 0 1 1 8.6 19L4 20Z" />
+    <path d="M8.5 9.5c0 3 2.5 5.5 5.5 5.5.6 0 1-.5.9-1.1l-.3-1.3a.9.9 0 0 0-1-.7l-1 .2a4.2 4.2 0 0 1-2.2-2.2l.2-1a.9.9 0 0 0-.7-1L8.6 7.6c-.6-.1-1.1.3-1.1.9Z" />
+  </svg>
+);
