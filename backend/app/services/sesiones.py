@@ -109,7 +109,7 @@ def _primera_fila_en_cola(id_sesion: str) -> tuple[int, dict] | tuple[None, None
     return None, None
 
 
-def agregar_a_cola(id_grupo: str, id_sesion: str, id_cancion: str) -> dict:
+def agregar_a_cola(id_grupo: str, id_sesion: str, id_cancion: str, cantantes: list[str] | None = None) -> dict:
     _, sesion_row = _sesiones().get_by_id("ID Sesión", id_sesion)
     if sesion_row is None or sesion_row["ID Grupo"] != id_grupo:
         raise ValueError("Sesión no encontrada")
@@ -121,12 +121,16 @@ def agregar_a_cola(id_grupo: str, id_sesion: str, id_cancion: str) -> dict:
     if id_cancion in ids_usadas:
         raise ValueError("Esa canción ya está en la sesión (cantada, pendiente o en cola)")
 
+    # Si se eligen cantantes a mano (dueto/grupal o "quiero que cante X"), se
+    # guardan ya en la fila de cola; si no, queda vacío y "siguiente" asigna
+    # por rotación al promoverla.
+    nombres = [n.strip() for n in (cantantes or []) if n.strip()]
     row = {
         "ID Sesión": id_sesion,
         "ID Grupo": id_grupo,
         "ID Canción": id_cancion,
         "Turno": 0,
-        "Cantada por": "",
+        "Cantada por": ", ".join(nombres),
         "Puntuación": "",
         "Estado": "En cola",
     }
@@ -152,9 +156,12 @@ def siguiente_cancion(id_grupo: str, id_sesion: str) -> dict:
     cola_row_number, cola_row = _primera_fila_en_cola(id_sesion)
     if cola_row is not None:
         nuevo_turno = len(turnos_previos) + 1
-        _cs().update_row(cola_row_number, {"Turno": nuevo_turno, "Cantada por": cantante, "Estado": "Pendiente"})
+        # Si la fila ya trae cantante(s) elegidos a mano (dueto/grupal), se
+        # respetan; si no, se asigna por rotación como siempre.
+        cantante_final = cola_row["Cantada por"] or cantante
+        _cs().update_row(cola_row_number, {"Turno": nuevo_turno, "Cantada por": cantante_final, "Estado": "Pendiente"})
         cola_row["Turno"] = nuevo_turno
-        cola_row["Cantada por"] = cantante
+        cola_row["Cantada por"] = cantante_final
         cola_row["Estado"] = "Pendiente"
         _sesiones().update_row(sesion_row_number, {"Turno actual": turno_actual + 1})
         return _turno_to_out(cola_row)
@@ -258,9 +265,12 @@ def marcar_cantada(id_grupo: str, id_sesion: str, id_cancion: str, puntuacion: i
     _cs().update_row(row_number, {"Puntuación": puntuacion_final, "Estado": "Cantada"})
     canciones_svc.registrar_cantada(id_cancion)
 
-    cantante_nombre = row["Cantada por"]
-    usuario = usuarios_svc.get_or_create(id_grupo, cantante_nombre)
-    usuarios_svc.sumar_puntos(usuario["id"], puntuacion_final)
+    # Un turno puede tener varios cantantes (dueto/grupal) separados por
+    # coma en "Cantada por" — cada uno recibe el puntaje completo, no
+    # repartido entre todos.
+    for nombre in [n.strip() for n in row["Cantada por"].split(",") if n.strip()]:
+        usuario = usuarios_svc.get_or_create(id_grupo, nombre)
+        usuarios_svc.sumar_puntos(usuario["id"], puntuacion_final)
 
     row["Puntuación"] = puntuacion_final
     row["Estado"] = "Cantada"

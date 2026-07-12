@@ -1,11 +1,39 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { IconCheck, IconClock, IconPlus, IconSkip, IconUsers } from "../components/Icons.jsx";
+import { IconBell, IconCheck, IconClock, IconPlus, IconSkip, IconUsers } from "../components/Icons.jsx";
 import { useIdentity } from "../lib/IdentityContext.jsx";
 import { useToast } from "../lib/ToastContext.jsx";
 import { api } from "../lib/api.js";
+import { formatCantantes } from "../lib/format.js";
 
 const TIMER_INICIAL = 240; // 4 minutos
+const NOTIF_STORAGE_KEY = "kt_notif_enabled";
+const POLL_MS = 6000;
+
+function cantantesDeTurno(t) {
+  return (t.cantada_por || "")
+    .split(",")
+    .map((n) => n.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function reproducirBeep() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    const ctx = new Ctx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.5);
+  } catch {
+    /* Web Audio no disponible en este navegador */
+  }
+}
 
 function CrearSesion({ onCreada }) {
   const { usuario } = useIdentity();
@@ -213,6 +241,10 @@ export default function Karaoke() {
   const [puntuando, setPuntuando] = useState(false);
   const [hayVotos, setHayVotos] = useState(false);
   const [mostrarCola, setMostrarCola] = useState(false);
+  const [cancionExpandida, setCancionExpandida] = useState(null);
+  const [cantantesElegidos, setCantantesElegidos] = useState([]);
+  const [notifActivas, setNotifActivas] = useState(() => localStorage.getItem(NOTIF_STORAGE_KEY) === "1");
+  const ultimoTurnoNotificado = useRef(null);
 
   async function cargarTodo() {
     try {
@@ -243,20 +275,77 @@ export default function Karaoke() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Sondeo corto mientras la sesión está activa: mantiene la cola/turno al
+  // día entre participantes y detecta cuándo le toca cantar al usuario.
+  useEffect(() => {
+    if (!sesion || sesion.estado !== "Activa") return;
+    const id = setInterval(async () => {
+      try {
+        const nuevosTurnos = await api.detalleSesion(sesion.id_sesion);
+        setTurnos(nuevosTurnos);
+        const miTurno = nuevosTurnos.find(
+          (t) => t.estado === "Pendiente" && cantantesDeTurno(t).includes(usuario.nombre.toLowerCase())
+        );
+        if (notifActivas && miTurno && ultimoTurnoNotificado.current !== miTurno.turno) {
+          ultimoTurnoNotificado.current = miTurno.turno;
+          reproducirBeep();
+          push(`¡Te toca cantar "${miTurno.cancion?.titulo}"! 🎤`, "success");
+          if ("Notification" in window && Notification.permission === "granted") {
+            new Notification("¡Te toca cantar! 🎤", { body: miTurno.cancion?.titulo || "" });
+          }
+        }
+      } catch {
+        /* sondeo silencioso: no interrumpe la sesión por un fallo puntual */
+      }
+    }, POLL_MS);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sesion?.id_sesion, sesion?.estado, notifActivas]);
+
+  async function alternarNotificaciones() {
+    if (!notifActivas) {
+      if ("Notification" in window && Notification.permission !== "granted") {
+        const permiso = await Notification.requestPermission();
+        if (permiso !== "granted") {
+          push("No se pudo activar: permiso denegado por el navegador", "error");
+          return;
+        }
+      }
+      localStorage.setItem(NOTIF_STORAGE_KEY, "1");
+      setNotifActivas(true);
+      push("Notificaciones activadas 🔔", "success");
+    } else {
+      localStorage.setItem(NOTIF_STORAGE_KEY, "0");
+      setNotifActivas(false);
+    }
+  }
+
   const pendiente = turnos.find((t) => t.estado === "Pendiente");
   const cola = turnos.filter((t) => t.estado === "En cola");
   const resueltos = turnos.filter((t) => t.estado !== "En cola");
   const idsUsadas = new Set(turnos.map((t) => t.id_cancion));
   const disponiblesParaCola = canciones.filter((c) => !idsUsadas.has(c.id));
 
-  async function agregarACola(idCancion) {
+  async function agregarACola(idCancion, cantantes = []) {
     try {
-      const t = await api.agregarACola(sesion.id_sesion, idCancion);
+      const t = await api.agregarACola(sesion.id_sesion, idCancion, cantantes);
       setTurnos((prev) => [...prev, t]);
-      push("Agregada a la cola 🎶", "success");
+      push(cantantes.length >= 2 ? "¡Dueto agregado a la cola! 🎤🎤" : "Agregada a la cola 🎶", "success");
     } catch (e) {
       push(e.message, "error");
+    } finally {
+      setCancionExpandida(null);
+      setCantantesElegidos([]);
     }
+  }
+
+  function abrirSelectorCantantes(idCancion) {
+    setCancionExpandida((actual) => (actual === idCancion ? null : idCancion));
+    setCantantesElegidos([]);
+  }
+
+  function toggleCantante(nombre) {
+    setCantantesElegidos((prev) => (prev.includes(nombre) ? prev.filter((n) => n !== nombre) : [...prev, nombre]));
   }
 
   async function siguiente() {
@@ -323,9 +412,18 @@ export default function Karaoke() {
     <div className="flex flex-col gap-4 max-w-xl mx-auto">
       <div className="flex items-center justify-between">
         <h2 className="title-glow text-2xl">Karaoke en vivo</h2>
-        <button onClick={finalizar} className="btn-danger !text-xs !py-1.5">
-          Finalizar
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={alternarNotificaciones}
+            className={`btn-ghost !text-xs !py-1.5 ${notifActivas ? "!text-neon-pinklight !border-neon-pinklight/40" : ""}`}
+            title={notifActivas ? "Notificaciones activadas" : "Avisarme cuando me toque cantar"}
+          >
+            <IconBell /> {notifActivas ? "Notif. ON" : "Notif."}
+          </button>
+          <button onClick={finalizar} className="btn-danger !text-xs !py-1.5">
+            Finalizar
+          </button>
+        </div>
       </div>
       <div className="card p-3 flex items-center gap-2 flex-wrap">
         <span className="text-xs text-white/40 flex items-center gap-1 shrink-0">
@@ -346,7 +444,7 @@ export default function Karaoke() {
         <>
           <div className="card p-6 text-center">
             <p className="text-xs uppercase tracking-widest text-neon-pinklight font-semibold mb-2">
-              Turno de {pendiente.cantada_por}
+              Turno de {formatCantantes(pendiente.cantada_por)}
             </p>
             <h3 className="font-display font-extrabold text-2xl mb-1">{pendiente.cancion?.titulo}</h3>
             <p className="text-white/60 mb-3">{pendiente.cancion?.artista}</p>
@@ -399,6 +497,7 @@ export default function Karaoke() {
                 <span className="text-white/30 text-xs w-4">{i + 1}.</span>
                 <span className="truncate flex-1">
                   {t.cancion?.titulo} <span className="text-white/40">— {t.cancion?.artista}</span>
+                  {t.cantada_por && <span className="text-white/40"> · {formatCantantes(t.cantada_por)}</span>}
                 </span>
               </div>
             ))}
@@ -410,16 +509,38 @@ export default function Karaoke() {
               <p className="text-white/40 text-sm text-center py-2">No quedan canciones disponibles.</p>
             ) : (
               disponiblesParaCola.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => agregarACola(c.id)}
-                  className="flex items-center justify-between gap-2 text-sm text-left p-1.5 rounded-lg hover:bg-white/5"
-                >
-                  <span className="truncate">
-                    {c.titulo} <span className="text-white/40">— {c.artista}</span>
-                  </span>
-                  <IconPlus className="shrink-0 text-white/40" />
-                </button>
+                <div key={c.id} className="rounded-lg hover:bg-white/5">
+                  <button
+                    type="button"
+                    onClick={() => abrirSelectorCantantes(c.id)}
+                    className="flex items-center justify-between gap-2 text-sm text-left p-1.5 w-full"
+                  >
+                    <span className="truncate">
+                      {c.titulo} <span className="text-white/40">— {c.artista}</span>
+                    </span>
+                    <IconPlus className="shrink-0 text-white/40" />
+                  </button>
+                  {cancionExpandida === c.id && (
+                    <div className="px-1.5 pb-2.5 flex flex-col gap-2">
+                      <p className="text-[11px] text-white/40">¿Quién canta? (opcional — vacío = se asigna por turno)</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {sesion.participantes.map((p) => (
+                          <button
+                            key={p}
+                            type="button"
+                            onClick={() => toggleCantante(p)}
+                            className={cantantesElegidos.includes(p) ? "chip-active" : "chip"}
+                          >
+                            {p}
+                          </button>
+                        ))}
+                      </div>
+                      <button onClick={() => agregarACola(c.id, cantantesElegidos)} className="btn-primary !py-1.5 !text-xs self-start">
+                        <IconPlus /> {cantantesElegidos.length >= 2 ? "Agregar dueto" : "Agregar a la cola"}
+                      </button>
+                    </div>
+                  )}
+                </div>
               ))
             )}
           </div>
@@ -434,7 +555,7 @@ export default function Karaoke() {
               <div key={`${t.turno}-${t.id_cancion}`} className="card p-3 flex items-center justify-between gap-3 text-sm">
                 <div className="min-w-0">
                   <p className="font-medium truncate">
-                    #{t.turno} {t.cancion?.titulo} <span className="text-white/40">— {t.cantada_por}</span>
+                    #{t.turno} {t.cancion?.titulo} <span className="text-white/40">— {formatCantantes(t.cantada_por)}</span>
                   </p>
                 </div>
                 <span

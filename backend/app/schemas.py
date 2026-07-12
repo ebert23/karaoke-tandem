@@ -160,6 +160,8 @@ class YoutubeResultadoOut(BaseModel):
 # --- Karaoke en vivo: cola, unirse, votación por turno ---
 class ColaRequest(BaseModel):
     id_cancion: str
+    # Cantantes elegidos a mano (dueto/grupal). Vacío = se asigna por turno.
+    cantantes: list[str] = Field(default_factory=list)
 
 
 class SesionUnirseRequest(BaseModel):

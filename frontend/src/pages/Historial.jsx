@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useToast } from "../lib/ToastContext.jsx";
 import { api } from "../lib/api.js";
+import { formatCantantes } from "../lib/format.js";
 
 function SesionItem({ sesion }) {
   const [abierto, setAbierto] = useState(false);
@@ -45,7 +46,7 @@ function SesionItem({ sesion }) {
             cantadas.map((t) => (
               <div key={t.turno} className="flex items-center justify-between text-sm">
                 <span className="truncate">
-                  {t.cancion?.titulo} — <span className="text-white/40">{t.cantada_por}</span>
+                  {t.cancion?.titulo} — <span className="text-white/40">{formatCantantes(t.cantada_por)}</span>
                 </span>
                 <span className="chip shrink-0">★ {t.puntuacion}</span>
               </div>

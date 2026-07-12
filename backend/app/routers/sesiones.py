@@ -59,7 +59,7 @@ def unirse(id_sesion: str, data: SesionUnirseRequest, id_grupo: str = Depends(ge
 @router.post("/{id_sesion}/cola", response_model=CancionSesionOut)
 def agregar_a_cola(id_sesion: str, data: ColaRequest, id_grupo: str = Depends(get_grupo_id)):
     try:
-        return svc.agregar_a_cola(id_grupo, id_sesion, data.id_cancion)
+        return svc.agregar_a_cola(id_grupo, id_sesion, data.id_cancion, data.cantantes)
     except ValueError as e:
         raise HTTPException(400, str(e))
 

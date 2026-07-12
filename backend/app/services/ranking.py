@@ -16,11 +16,20 @@ BADGES = {
 }
 
 
+def _cantantes_de_turno(row: dict) -> list[str]:
+    return [n.strip() for n in row["Cantada por"].split(",") if n.strip()]
+
+
 def _cantadas_de(id_grupo: str, nombre: str) -> list[dict]:
+    # "Cantada por" puede traer varios nombres separados por coma (dueto o
+    # grupal) — cada uno cuenta la canción como propia, no solo el primero.
     rows = SheetTable("Canciones_Sesion").all_rows()
+    nombre_lower = nombre.strip().lower()
     return [
         r for r in rows
-        if r["ID Grupo"] == id_grupo and r["Cantada por"] == nombre and r["Estado"] == "Cantada"
+        if r["ID Grupo"] == id_grupo
+        and r["Estado"] == "Cantada"
+        and nombre_lower in [n.lower() for n in _cantantes_de_turno(r)]
     ]
 
 
@@ -57,11 +66,11 @@ def ranking_noche(id_grupo: str, id_sesion: str) -> list[dict]:
     ]
     acumulado: dict[str, dict] = {}
     for r in rows:
-        nombre = r["Cantada por"]
-        acumulado.setdefault(nombre, {"puntos": 0, "canciones": 0})
-        if str(r["Puntuación"]).strip().isdigit():
-            acumulado[nombre]["puntos"] += int(r["Puntuación"])
-        acumulado[nombre]["canciones"] += 1
+        puntos_fila = int(r["Puntuación"]) if str(r["Puntuación"]).strip().isdigit() else 0
+        for nombre in _cantantes_de_turno(r):
+            acumulado.setdefault(nombre, {"puntos": 0, "canciones": 0})
+            acumulado[nombre]["puntos"] += puntos_fila
+            acumulado[nombre]["canciones"] += 1
 
     resultado = []
     for nombre, datos in acumulado.items():

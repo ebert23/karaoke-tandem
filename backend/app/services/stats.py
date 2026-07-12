@@ -11,9 +11,14 @@ def estadisticas(id_grupo: str, id_usuario: str) -> dict:
     if not usuario:
         raise ValueError("Usuario no encontrado")
 
+    # "Cantada por" puede traer varios nombres separados por coma (dueto o
+    # grupal); contamos la fila si el usuario figura entre ellos.
+    nombre_lower = usuario["nombre"].strip().lower()
     filas = [
         r for r in SheetTable("Canciones_Sesion").all_rows()
-        if r["ID Grupo"] == id_grupo and r["Cantada por"] == usuario["nombre"] and r["Estado"] == "Cantada"
+        if r["ID Grupo"] == id_grupo
+        and r["Estado"] == "Cantada"
+        and nombre_lower in [n.strip().lower() for n in r["Cantada por"].split(",") if n.strip()]
     ]
 
     detalle = []

@@ -68,7 +68,7 @@ export const api = {
   historialSesiones: () => get("/sesiones"),
   detalleSesion: (id) => get(`/sesiones/${id}/detalle`),
   sesionUnirse: (id, nombre) => post(`/sesiones/${id}/unirse`, { nombre }),
-  agregarACola: (id, idCancion) => post(`/sesiones/${id}/cola`, { id_cancion: idCancion }),
+  agregarACola: (id, idCancion, cantantes = []) => post(`/sesiones/${id}/cola`, { id_cancion: idCancion, cantantes }),
   siguienteCancion: (id) => post(`/sesiones/${id}/siguiente`),
   votarTurno: (id, idCancion, idUsuario, puntuacion) =>
     post(`/sesiones/${id}/canciones/${idCancion}/votar_turno`, { id_usuario: idUsuario, puntuacion }),
