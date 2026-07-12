@@ -380,7 +380,7 @@ export default function Semana() {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h2 className="title-glow text-2xl">Lista de la semana</h2>
+        <h2 className="title-glow text-2xl">Agregá tus canciones 🎶</h2>
         <div className="flex gap-2">
           <a href={api.exportCsvUrl()} className="btn-ghost" download>
             CSV

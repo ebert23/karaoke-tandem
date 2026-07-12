@@ -85,6 +85,20 @@ def unirse(id_grupo: str, id_sesion: str, nombre: str) -> dict:
     return _sesion_row_to_out(sesion_row)
 
 
+def quitar_participante(id_grupo: str, id_sesion: str, nombre: str) -> None:
+    """Saca a alguien de la lista de participantes en vivo de una sesión
+    (p.ej. al expulsarlo del grupo). No toca turnos ya jugados — esos
+    quedan como registro histórico."""
+    row_number, row = _sesiones().get_by_id("ID Sesión", id_sesion)
+    if row_number is None or row["ID Grupo"] != id_grupo:
+        return
+    nombre_lower = nombre.strip().lower()
+    participantes = [p.strip() for p in row["Participantes"].split(",") if p.strip()]
+    nuevos = [p for p in participantes if p.lower() != nombre_lower]
+    if nuevos != participantes:
+        _sesiones().update_row(row_number, {"Participantes": ", ".join(nuevos)})
+
+
 def _turnos_de_sesion(id_sesion: str) -> list[dict]:
     return [r for r in _cs().all_rows() if r["ID Sesión"] == id_sesion]
 

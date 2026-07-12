@@ -5,7 +5,7 @@ import { useIdentity } from "../lib/IdentityContext.jsx";
 import { IconChart, IconDice, IconHistory, IconLogout, IconMic, IconMusic, IconTrophy, IconUsers } from "./Icons.jsx";
 
 const NAV_ITEMS = [
-  { to: "/", label: "Semana", Icon: IconMusic, end: true },
+  { to: "/", label: "Canciones", Icon: IconMusic, end: true },
   { to: "/karaoke", label: "Karaoke", Icon: IconMic },
   { to: "/retos", label: "Retos", Icon: IconDice },
   { to: "/ranking", label: "Ranking", Icon: IconTrophy },

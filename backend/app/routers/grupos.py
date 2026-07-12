@@ -10,6 +10,7 @@ from ..schemas import (
     ReclamarAdminRequest,
 )
 from ..services import grupos as svc
+from ..services import sesiones as sesiones_svc
 from ..services import usuarios as usuarios_svc
 
 router = APIRouter(prefix="/api/grupos", tags=["grupos"])
@@ -69,9 +70,18 @@ def quitar_admin(id_grupo: str, id_usuario: str, data: MiembroAccionRequest):
 
 @router.delete("/{id_grupo}/miembros/{id_usuario}", response_model=GrupoDetalleOut)
 def expulsar(id_grupo: str, id_usuario: str, data: MiembroAccionRequest):
+    objetivo = usuarios_svc.get_por_id(id_grupo, id_usuario)
     try:
-        return svc.expulsar_miembro(id_grupo, data.id_usuario_actor, id_usuario)
+        resultado = svc.expulsar_miembro(id_grupo, data.id_usuario_actor, id_usuario)
     except PermissionError as e:
         raise HTTPException(403, str(e))
     except ValueError as e:
         raise HTTPException(400, str(e))
+    # Si estaba participando en la sesión de karaoke activa, lo sacamos de
+    # ahí también — expulsarlo del grupo pero seguir viéndolo cantando en
+    # vivo sería confuso.
+    if objetivo:
+        sesion_activa = sesiones_svc.get_activa(id_grupo)
+        if sesion_activa:
+            sesiones_svc.quitar_participante(id_grupo, sesion_activa["id_sesion"], objetivo["nombre"])
+    return resultado
