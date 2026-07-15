@@ -33,6 +33,8 @@ export default {
       animation: {
         pulseGlow: "pulseGlow 2.4s ease-in-out infinite",
         floatSlow: "floatSlow 6s ease-in-out infinite",
+        retoEntrada: "retoEntrada 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both",
+        confettiCaer: "confettiCaer 1.8s ease-in forwards",
       },
       keyframes: {
         pulseGlow: {
@@ -42,6 +44,16 @@ export default {
         floatSlow: {
           "0%, 100%": { transform: "translateY(0px)" },
           "50%": { transform: "translateY(-6px)" },
+        },
+        retoEntrada: {
+          "0%": { transform: "scale(0.3) rotate(-8deg)", opacity: 0 },
+          "50%": { transform: "scale(1.08) rotate(4deg)", opacity: 1 },
+          "70%": { transform: "scale(0.96) rotate(-2deg)" },
+          "100%": { transform: "scale(1) rotate(0deg)", opacity: 1 },
+        },
+        confettiCaer: {
+          "0%": { transform: "translateY(-10vh) rotate(0deg)", opacity: 1 },
+          "100%": { transform: "translateY(110vh) rotate(720deg)", opacity: 0 },
         },
       },
     },

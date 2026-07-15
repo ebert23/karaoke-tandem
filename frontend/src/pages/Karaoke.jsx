@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { IconBell, IconCheck, IconClock, IconPlus, IconSkip, IconTrash, IconUsers } from "../components/Icons.jsx";
+import { IconBell, IconCheck, IconClock, IconDice, IconPlus, IconSkip, IconTrash, IconUsers } from "../components/Icons.jsx";
+import RetoModal from "../components/RetoModal.jsx";
 import YouTubePlayer from "../components/YouTubePlayer.jsx";
 import { useGroup } from "../lib/GroupContext.jsx";
 import { useIdentity } from "../lib/IdentityContext.jsx";
@@ -17,6 +18,12 @@ function cantantesDeTurno(t) {
     .split(",")
     .map((n) => n.trim().toLowerCase())
     .filter(Boolean);
+}
+
+// Cada cuántas canciones cantadas toca un reto automático: 3 a 5, al azar
+// cada vez, para que no se vuelva predecible.
+function nuevoUmbralReto() {
+  return 3 + Math.floor(Math.random() * 3);
 }
 
 function reproducirBeep() {
@@ -249,6 +256,9 @@ export default function Karaoke() {
   const [notifActivas, setNotifActivas] = useState(() => localStorage.getItem(NOTIF_STORAGE_KEY) === "1");
   const [modo, setModo] = useState("aleatorio"); // "aleatorio" | "cola" — se carga por sesión al abrirla
   const [moviendoCola, setMoviendoCola] = useState("");
+  const [mostrarReto, setMostrarReto] = useState(false);
+  const [cancionesDesdeReto, setCancionesDesdeReto] = useState(0);
+  const [proximoRetoEn, setProximoRetoEn] = useState(() => nuevoUmbralReto());
   const ultimoTurnoNotificado = useRef(null);
   const esAdmin = grupo.admins?.includes(usuario.id) ?? false;
 
@@ -408,6 +418,15 @@ export default function Karaoke() {
       setTurnos((prev) => prev.map((t) => (t.turno === actualizado.turno ? actualizado : t)));
       setPuntuando(false);
       push("¡Puntuación registrada! 🌟", "success");
+
+      const cancionesNuevas = cancionesDesdeReto + 1;
+      if (cancionesNuevas >= proximoRetoEn) {
+        setCancionesDesdeReto(0);
+        setProximoRetoEn(nuevoUmbralReto());
+        setMostrarReto(true);
+      } else {
+        setCancionesDesdeReto(cancionesNuevas);
+      }
     } catch (e) {
       push(e.message, "error");
     }
@@ -447,13 +466,18 @@ export default function Karaoke() {
   }
 
   return (
-    <div className="flex flex-col gap-4 max-w-xl mx-auto">
+    <>
+      {mostrarReto && <RetoModal onClose={() => setMostrarReto(false)} />}
+      <div className="flex flex-col gap-4 max-w-xl mx-auto">
       <div className="flex items-center justify-between">
         <h2 className="title-glow text-2xl">Karaoke en vivo</h2>
         <div className="flex items-center gap-2">
           <a href="#/tv" target="_blank" rel="noreferrer" className="btn-ghost !text-xs !py-1.5">
             📺 Modo TV
           </a>
+          <button onClick={() => setMostrarReto(true)} className="btn-ghost !text-xs !py-1.5" title="Sacar un reto ahora">
+            <IconDice /> Reto
+          </button>
           <button
             onClick={alternarNotificaciones}
             className={`btn-ghost !text-xs !py-1.5 ${notifActivas ? "!text-neon-pinklight !border-neon-pinklight/40" : ""}`}
@@ -663,6 +687,7 @@ export default function Karaoke() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }
