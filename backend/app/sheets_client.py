@@ -9,6 +9,7 @@ nunca interpreta un valor escrito por un usuario (p.ej. "=HYPERLINK(...)")
 como fórmula — se guarda siempre como texto literal.
 """
 import json
+import time
 from functools import lru_cache
 from typing import Any
 
@@ -238,6 +239,17 @@ def ensure_sheets() -> None:
             )
 
 
+# Caché de lectura en memoria del proceso, por hoja: (timestamp, filas). Vive
+# mientras la instancia serverless siga "tibia" — no es un caché distribuido,
+# pero alcanza para que las varias lecturas de una misma hoja que dispara una
+# sola carga de pantalla (o ráfagas de varios usuarios casi al mismo tiempo)
+# no cada una golpee la API de Sheets, que es lo que agotaba la cuota de
+# lecturas por minuto (429). Cualquier escritura invalida la entrada al toque
+# para no servir datos viejos después de guardar algo.
+_TTL_SEGUNDOS = 4
+_cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+
+
 class SheetTable:
     """Acceso genérico de lectura/escritura a una hoja, tratada como tabla."""
 
@@ -251,17 +263,34 @@ class SheetTable:
 
     def all_rows(self) -> list[dict[str, Any]]:
         """Devuelve todas las filas como dicts (todos los valores como texto)."""
+        cacheado = _cache.get(self.name)
+        if cacheado is not None and time.monotonic() - cacheado[0] < _TTL_SEGUNDOS:
+            return [dict(r) for r in cacheado[1]]
         records = self.ws.get_all_records(
             expected_headers=self.headers, numericise_ignore=["all"]
         )
-        return records
+        _cache[self.name] = (time.monotonic(), records)
+        return [dict(r) for r in records]
+
+    def _invalidar_cache(self) -> None:
+        _cache.pop(self.name, None)
 
     def append(self, row: dict[str, Any]) -> None:
         values = [str(row.get(h, "")) for h in self.headers]
         self.ws.append_row(values, value_input_option="RAW")
+        self._invalidar_cache()
 
     def find_row_number(self, id_field: str, id_value: str) -> int | None:
-        """1-based row number (incluye encabezado) o None si no existe."""
+        """1-based row number (incluye encabezado) o None si no existe.
+
+        A propósito NO usa la caché de all_rows(): esta función resuelve la
+        posición exacta de una fila que después se va a escribir
+        (update_row/delete_row). Si dos instancias serverless tienen cada
+        una su propio caché y una borra una fila mientras la otra todavía
+        tiene la posición vieja, escribiría en la fila equivocada. Para
+        listados de solo lectura sí conviene el caché (ver all_rows());
+        para resolver "qué fila edito" siempre se pide en vivo.
+        """
         col = self.headers.index(id_field) + 1
         cell = self.ws.find(id_value, in_column=col)
         return cell.row if cell else None
@@ -273,6 +302,7 @@ class SheetTable:
             cells.append(gspread.Cell(row=row_number, col=col, value=str(value)))
         if cells:
             self.ws.update_cells(cells, value_input_option="RAW")
+        self._invalidar_cache()
 
     def get_by_id(self, id_field: str, id_value: str) -> tuple[int, dict[str, Any]] | tuple[None, None]:
         row_number = self.find_row_number(id_field, id_value)
@@ -284,3 +314,4 @@ class SheetTable:
 
     def delete_row(self, row_number: int) -> None:
         self.ws.delete_rows(row_number)
+        self._invalidar_cache()
