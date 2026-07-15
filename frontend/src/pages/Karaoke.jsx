@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { IconBell, IconCheck, IconClock, IconPlus, IconSkip, IconTrash, IconUsers } from "../components/Icons.jsx";
+import YouTubePlayer from "../components/YouTubePlayer.jsx";
 import { useGroup } from "../lib/GroupContext.jsx";
 import { useIdentity } from "../lib/IdentityContext.jsx";
 import { useToast } from "../lib/ToastContext.jsx";
@@ -488,12 +489,13 @@ export default function Karaoke() {
             </p>
             <h3 className="font-display font-extrabold text-2xl mb-1">{pendiente.cancion?.titulo}</h3>
             <p className="text-white/60 mb-3">{pendiente.cancion?.artista}</p>
+            <div className="mb-4">
+              <YouTubePlayer linkYoutube={pendiente.cancion?.link_youtube} />
+            </div>
+            <p className="text-white/30 text-xs mb-4 -mt-2">
+              Tocá el ícono de transmitir en el video para proyectarlo en una TV con Chromecast en la misma wifi
+            </p>
             <Temporizador turnoKey={pendiente.turno} />
-            {pendiente.cancion?.link_youtube && (
-              <a href={pendiente.cancion.link_youtube} target="_blank" rel="noreferrer" className="btn-primary mb-4 inline-flex">
-                ▶ Abrir en YouTube
-              </a>
-            )}
             {!puntuando ? (
               <div className="flex gap-2 justify-center mt-2">
                 <button
