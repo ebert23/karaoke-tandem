@@ -178,7 +178,7 @@ function VotacionEnVivo({ sesion, pendiente, usuario, onListoParaMarcar }) {
       }
     }
     cargar();
-    const id = setInterval(cargar, 4000);
+    const id = setInterval(cargar, 6000);
     return () => {
       vivo = false;
       clearInterval(id);

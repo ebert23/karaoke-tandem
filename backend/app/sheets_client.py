@@ -246,7 +246,7 @@ def ensure_sheets() -> None:
 # no cada una golpee la API de Sheets, que es lo que agotaba la cuota de
 # lecturas por minuto (429). Cualquier escritura invalida la entrada al toque
 # para no servir datos viejos después de guardar algo.
-_TTL_SEGUNDOS = 4
+_TTL_SEGUNDOS = 10
 _cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 
 
