@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { IconDice } from "./Icons.jsx";
 import { api } from "../lib/api.js";
+import { elegirCancionAsignada } from "../lib/retoCanciones.js";
 import { mensajeAleatorio } from "../lib/retoMensajes.js";
 
 const COLOR_CATEGORIA = {
@@ -9,6 +10,9 @@ const COLOR_CATEGORIA = {
   Creativo: "from-emerald-400 to-teal-500",
   Grupo: "from-neon-purple to-neon-pink",
 };
+
+// La mitad de las veces, el reto viene acompañado de una canción sugerida.
+const PROB_CANCION_ASIGNADA = 0.5;
 
 function reproducirSonidoReto() {
   try {
@@ -71,10 +75,12 @@ export default function RetoModal({ onClose }) {
   const [mensaje] = useState(mensajeAleatorio);
   const [etapa, setEtapa] = useState("hype"); // "hype" | "reto"
   const [reto, setReto] = useState(null);
+  const [cancionAsignada, setCancionAsignada] = useState(null);
   const [pidiendo, setPidiendo] = useState(false);
 
   async function pedirReto() {
     setPidiendo(true);
+    setCancionAsignada(Math.random() < PROB_CANCION_ASIGNADA ? elegirCancionAsignada() : null);
     try {
       const r = await api.retoAleatorio();
       setReto(r);
@@ -114,7 +120,15 @@ export default function RetoModal({ onClose }) {
           <span className="chip !bg-black/20 !border-white/20 mb-4 inline-block">
             {reto?.categoria} · {reto?.dificultad}
           </span>
-          <p className="font-display font-bold text-xl leading-snug mb-6">{reto?.texto}</p>
+          <p className="font-display font-bold text-xl leading-snug mb-4">{reto?.texto}</p>
+          {cancionAsignada && (
+            <div className="bg-black/25 rounded-xl px-4 py-3 mb-6 text-sm">
+              <p className="text-white/70 mb-0.5">{cancionAsignada.etiqueta}</p>
+              <p className="font-display font-bold">
+                🎵 {cancionAsignada.titulo} — {cancionAsignada.artista}
+              </p>
+            </div>
+          )}
           <div className="flex gap-2 justify-center flex-wrap">
             <button onClick={pedirReto} disabled={pidiendo} className="btn-ghost">
               <IconDice /> {pidiendo ? "Girando…" : "Otro reto"}

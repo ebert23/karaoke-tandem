@@ -16,6 +16,12 @@ const MENSAJES = [
   // Picantes
   "¡AVISO PICANTE! 🌶️ Hora del Reto… que no te tiemblen las piernas.",
   "¡MODO SIN VERGÜENZA ACTIVADO! 😏 ¡Sin censura!",
+  // Más
+  "¡CÓDIGO ROJO! 🚨 El micrófono acaba de elegir a su siguiente víctima…",
+  "¡SE ACABÓ LA TREGUA! ⚡ Hora del Reto — nadie se salva.",
+  "¡EL DESTINO HA HABLADO! 🔮 Y dice que te toca sufrir un poquito…",
+  "¡ALERTA DE VERGÜENZA! 🙈 Prepará la sonrisa, viene el Reto.",
+  "¡BASTA DE CANTAR TRANQUILO! 🎉 Es hora de complicarte la noche.",
 ];
 
 export function mensajeAleatorio() {

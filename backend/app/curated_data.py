@@ -12,6 +12,8 @@ DEFAULT_RETOS: list[list[str]] = [
     ["Elige a alguien para que sea tu dueto sorpresa", "Medio", "Grupo"],
     ["Si te equivocas en la letra, debes repetir la estrofa bailando", "Difícil", "Picante"],
     ["Regala un piropo cantado a alguien del público antes de empezar", "Fácil", "Picante"],
+    ["Canta esta canción como si fueras del género contrario al tuyo", "Medio", "Creativo"],
+    ["Canta con un estilo de voz totalmente opuesto al tuyo (agudo si sos grave, grave si sos agudo)", "Difícil", "Creativo"],
 ]
 
 # Sugerencias de canciones populares por género, para el modal de "agregar
