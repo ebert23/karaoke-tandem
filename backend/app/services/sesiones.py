@@ -4,32 +4,20 @@ saltar y cierre e historial.
 """
 import random
 
-from ..sheets_client import SheetTable
+from .. import db
 from . import canciones as canciones_svc
 from . import grupos as grupos_svc
 from . import usuarios as usuarios_svc
 from .ids import new_id, now_iso
 
 
-def _sesiones() -> SheetTable:
-    return SheetTable("Sesiones")
-
-
-def _cs() -> SheetTable:
-    return SheetTable("Canciones_Sesion")
-
-
-def _votos_turno() -> SheetTable:
-    return SheetTable("Votos_Turno")
-
-
 def _sesion_row_to_out(row: dict) -> dict:
     return {
-        "id_sesion": row["ID Sesión"],
-        "fecha": row["Fecha"],
-        "participantes": [p.strip() for p in row["Participantes"].split(",") if p.strip()],
-        "estado": row["Estado"],
-        "turno_actual": int(row["Turno actual"] or 0),
+        "id_sesion": row["id_sesion"],
+        "fecha": row["fecha"],
+        "participantes": row["participantes"],
+        "estado": row["estado"],
+        "turno_actual": row["turno_actual"],
     }
 
 
@@ -41,48 +29,47 @@ def crear(id_grupo: str, participantes: list[str]) -> dict:
         usuario = usuarios_svc.get_or_create(id_grupo, nombre)
         usuarios_svc.incrementar_sesiones(usuario["id"])
 
-    row = {
-        "ID Sesión": new_id("S"),
-        "ID Grupo": id_grupo,
-        "Fecha": now_iso(),
-        "Participantes": ", ".join(nombres),
-        "Estado": "Activa",
-        "Turno actual": 0,
-    }
-    _sesiones().append(row)
-    return _sesion_row_to_out(row)
+    id_sesion = new_id("S")
+    fecha = now_iso()
+    db.execute(
+        "INSERT INTO sesiones (id_sesion, id_grupo, fecha, participantes, estado, turno_actual) "
+        "VALUES (%s, %s, %s, %s, 'Activa', 0)",
+        (id_sesion, id_grupo, fecha, nombres),
+    )
+    return {"id_sesion": id_sesion, "fecha": fecha, "participantes": nombres, "estado": "Activa", "turno_actual": 0}
 
 
 def get_activa(id_grupo: str) -> dict | None:
-    activas = [r for r in _sesiones().all_rows() if r["ID Grupo"] == id_grupo and r["Estado"] == "Activa"]
-    if not activas:
-        return None
-    return _sesion_row_to_out(activas[-1])
+    row = db.fetch_one(
+        "SELECT * FROM sesiones WHERE id_grupo = %s AND estado = 'Activa' ORDER BY fecha DESC LIMIT 1",
+        (id_grupo,),
+    )
+    return _sesion_row_to_out(row) if row else None
 
 
 def get_por_id(id_grupo: str, id_sesion: str) -> dict | None:
-    _, row = _sesiones().get_by_id("ID Sesión", id_sesion)
-    if row is None or row["ID Grupo"] != id_grupo:
+    row = db.fetch_one("SELECT * FROM sesiones WHERE id_sesion = %s", (id_sesion,))
+    if row is None or row["id_grupo"] != id_grupo:
         return None
     return _sesion_row_to_out(row)
 
 
 def unirse(id_grupo: str, id_sesion: str, nombre: str) -> dict:
-    row_number, sesion_row = _sesiones().get_by_id("ID Sesión", id_sesion)
-    if sesion_row is None or sesion_row["ID Grupo"] != id_grupo:
+    sesion_row = db.fetch_one("SELECT * FROM sesiones WHERE id_sesion = %s", (id_sesion,))
+    if sesion_row is None or sesion_row["id_grupo"] != id_grupo:
         raise ValueError("Sesión no encontrada")
-    if sesion_row["Estado"] != "Activa":
+    if sesion_row["estado"] != "Activa":
         raise ValueError("La sesión no está activa")
 
     nombre = nombre.strip()
     usuario = usuarios_svc.get_or_create(id_grupo, nombre)
     usuarios_svc.incrementar_sesiones(usuario["id"])
 
-    participantes = [p.strip() for p in sesion_row["Participantes"].split(",") if p.strip()]
+    participantes = sesion_row["participantes"]
     if nombre.lower() not in [p.lower() for p in participantes]:
-        participantes.append(nombre)
-        _sesiones().update_row(row_number, {"Participantes": ", ".join(participantes)})
-        sesion_row["Participantes"] = ", ".join(participantes)
+        participantes = participantes + [nombre]
+        db.execute("UPDATE sesiones SET participantes = %s WHERE id_sesion = %s", (participantes, id_sesion))
+        sesion_row["participantes"] = participantes
     return _sesion_row_to_out(sesion_row)
 
 
@@ -90,49 +77,36 @@ def quitar_participante(id_grupo: str, id_sesion: str, nombre: str) -> None:
     """Saca a alguien de la lista de participantes en vivo de una sesión
     (p.ej. al expulsarlo del grupo). No toca turnos ya jugados — esos
     quedan como registro histórico."""
-    row_number, row = _sesiones().get_by_id("ID Sesión", id_sesion)
-    if row_number is None or row["ID Grupo"] != id_grupo:
+    row = db.fetch_one("SELECT * FROM sesiones WHERE id_sesion = %s", (id_sesion,))
+    if row is None or row["id_grupo"] != id_grupo:
         return
     nombre_lower = nombre.strip().lower()
-    participantes = [p.strip() for p in row["Participantes"].split(",") if p.strip()]
-    nuevos = [p for p in participantes if p.lower() != nombre_lower]
-    if nuevos != participantes:
-        _sesiones().update_row(row_number, {"Participantes": ", ".join(nuevos)})
-
-
-def _turnos_de_sesion(id_sesion: str) -> list[dict]:
-    return [r for r in _cs().all_rows() if r["ID Sesión"] == id_sesion]
+    nuevos = [p for p in row["participantes"] if p.lower() != nombre_lower]
+    if nuevos != row["participantes"]:
+        db.execute("UPDATE sesiones SET participantes = %s WHERE id_sesion = %s", (nuevos, id_sesion))
 
 
 def _turno_to_out(row: dict, incluir_cancion: bool = True) -> dict:
-    out = {
-        "id_sesion": row["ID Sesión"],
-        "id_cancion": row["ID Canción"],
-        "turno": int(row["Turno"] or 0),
-        "cantada_por": row["Cantada por"],
-        "puntuacion": int(row["Puntuación"]) if str(row["Puntuación"]).strip().isdigit() else None,
-        "estado": row["Estado"],
-        "cancion": canciones_svc.get_por_id(row["ID Canción"]) if incluir_cancion else None,
+    return {
+        "id_sesion": row["id_sesion"],
+        "id_cancion": row["id_cancion"],
+        "turno": row["turno"],
+        "cantada_por": row["cantada_por"],
+        "puntuacion": row["puntuacion"],
+        "estado": row["estado"],
+        "cancion": canciones_svc.get_por_id(row["id_cancion"]) if incluir_cancion else None,
     }
-    return out
-
-
-def _primera_fila_en_cola(id_sesion: str) -> tuple[int, dict] | tuple[None, None]:
-    for i, row in enumerate(_cs().all_rows()):
-        if row["ID Sesión"] == id_sesion and row["Estado"] == "En cola":
-            return i + 2, row  # +2: fila 1 es encabezado, all_rows es 0-indexado
-    return None, None
 
 
 def agregar_a_cola(id_grupo: str, id_sesion: str, id_cancion: str, cantantes: list[str] | None = None) -> dict:
-    _, sesion_row = _sesiones().get_by_id("ID Sesión", id_sesion)
-    if sesion_row is None or sesion_row["ID Grupo"] != id_grupo:
+    sesion_row = db.fetch_one("SELECT * FROM sesiones WHERE id_sesion = %s", (id_sesion,))
+    if sesion_row is None or sesion_row["id_grupo"] != id_grupo:
         raise ValueError("Sesión no encontrada")
-    if sesion_row["Estado"] != "Activa":
+    if sesion_row["estado"] != "Activa":
         raise ValueError("La sesión no está activa")
 
-    turnos_previos = _turnos_de_sesion(id_sesion)
-    ids_usadas = {t["ID Canción"] for t in turnos_previos if t["Estado"] in ("Pendiente", "Cantada", "En cola")}
+    turnos_previos = db.fetch_all("SELECT id_cancion, estado FROM canciones_sesion WHERE id_sesion = %s", (id_sesion,))
+    ids_usadas = {t["id_cancion"] for t in turnos_previos if t["estado"] in ("Pendiente", "Cantada", "En cola")}
     if id_cancion in ids_usadas:
         raise ValueError("Esa canción ya está en la sesión (cantada, pendiente o en cola)")
 
@@ -140,16 +114,18 @@ def agregar_a_cola(id_grupo: str, id_sesion: str, id_cancion: str, cantantes: li
     # guardan ya en la fila de cola; si no, queda vacío y "siguiente" asigna
     # por rotación al promoverla.
     nombres = [n.strip() for n in (cantantes or []) if n.strip()]
-    row = {
-        "ID Sesión": id_sesion,
-        "ID Grupo": id_grupo,
-        "ID Canción": id_cancion,
-        "Turno": 0,
-        "Cantada por": ", ".join(nombres),
-        "Puntuación": "",
-        "Estado": "En cola",
-    }
-    _cs().append(row)
+    cantada_por = ", ".join(nombres)
+
+    siguiente_orden = db.fetch_one(
+        "SELECT COALESCE(MAX(orden), 0) + 1 AS n FROM canciones_sesion WHERE id_sesion = %s AND estado = 'En cola'",
+        (id_sesion,),
+    )["n"]
+
+    row = db.fetch_one(
+        "INSERT INTO canciones_sesion (id_sesion, id_grupo, id_cancion, orden, turno, cantada_por, puntuacion, estado) "
+        "VALUES (%s, %s, %s, %s, 0, %s, NULL, 'En cola') RETURNING *",
+        (id_sesion, id_grupo, id_cancion, siguiente_orden, cantada_por),
+    )
     return _turno_to_out(row)
 
 
@@ -163,26 +139,24 @@ def _requiere_admin(id_grupo: str, id_usuario_actor: str) -> None:
 
 def quitar_de_cola(id_grupo: str, id_sesion: str, id_cancion: str, id_usuario_actor: str) -> None:
     _requiere_admin(id_grupo, id_usuario_actor)
-    row_number, row = _fila_turno(id_sesion, id_cancion)
-    if row_number is None or row["ID Grupo"] != id_grupo:
+    row = _fila_turno(id_sesion, id_cancion)
+    if row is None or row["id_grupo"] != id_grupo:
         raise ValueError("Canción no encontrada en la sesión")
-    if row["Estado"] != "En cola":
+    if row["estado"] != "En cola":
         raise ValueError("Esa canción ya no está en la cola (ya se promovió o se cantó)")
-    _cs().delete_row(row_number)
+    db.execute("DELETE FROM canciones_sesion WHERE id = %s", (row["id"],))
 
 
 def mover_en_cola(id_grupo: str, id_sesion: str, id_cancion: str, id_usuario_actor: str, direccion: str) -> list[dict]:
-    """Reordena la cola intercambiando el contenido de dos filas vecinas — el
-    orden de la cola es el orden físico de las filas "En cola" en la hoja
-    (lo usa _primera_fila_en_cola), así que no hace falta una columna de
-    posición nueva."""
+    """Reordena la cola intercambiando la posición ("orden") de dos filas
+    vecinas — mucho más simple que el truco de Sheets de simular el orden
+    con la posición física de las filas."""
     _requiere_admin(id_grupo, id_usuario_actor)
-    filas_cola = [
-        (i + 2, row)  # +2: fila 1 es encabezado, all_rows es 0-indexado
-        for i, row in enumerate(_cs().all_rows())
-        if row["ID Sesión"] == id_sesion and row["Estado"] == "En cola"
-    ]
-    posicion = next((i for i, (_, row) in enumerate(filas_cola) if row["ID Canción"] == id_cancion), None)
+    filas_cola = db.fetch_all(
+        "SELECT * FROM canciones_sesion WHERE id_sesion = %s AND estado = 'En cola' ORDER BY orden ASC, id ASC",
+        (id_sesion,),
+    )
+    posicion = next((i for i, row in enumerate(filas_cola) if row["id_cancion"] == id_cancion), None)
     if posicion is None:
         raise ValueError("Canción no encontrada en la cola")
 
@@ -190,131 +164,114 @@ def mover_en_cola(id_grupo: str, id_sesion: str, id_cancion: str, id_usuario_act
     if vecino < 0 or vecino >= len(filas_cola):
         raise ValueError("Esa canción ya está en un extremo de la cola")
 
-    row_number_a, row_a = filas_cola[posicion]
-    row_number_b, row_b = filas_cola[vecino]
-    campos = ["ID Canción", "Cantada por"]
-    _cs().update_row(row_number_a, {c: row_b[c] for c in campos})
-    _cs().update_row(row_number_b, {c: row_a[c] for c in campos})
-    row_a["ID Canción"], row_b["ID Canción"] = row_b["ID Canción"], row_a["ID Canción"]
-    row_a["Cantada por"], row_b["Cantada por"] = row_b["Cantada por"], row_a["Cantada por"]
+    fila_a, fila_b = filas_cola[posicion], filas_cola[vecino]
+    db.execute("UPDATE canciones_sesion SET orden = %s WHERE id = %s", (fila_b["orden"], fila_a["id"]))
+    db.execute("UPDATE canciones_sesion SET orden = %s WHERE id = %s", (fila_a["orden"], fila_b["id"]))
+    fila_a["orden"], fila_b["orden"] = fila_b["orden"], fila_a["orden"]
 
-    return [_turno_to_out(r) for _, r in filas_cola]
+    filas_cola.sort(key=lambda r: (r["orden"], r["id"]))
+    return [_turno_to_out(r) for r in filas_cola]
 
 
 def siguiente_cancion(id_grupo: str, id_sesion: str) -> dict:
-    sesion_row_number, sesion_row = _sesiones().get_by_id("ID Sesión", id_sesion)
-    if sesion_row is None or sesion_row["ID Grupo"] != id_grupo:
+    sesion_row = db.fetch_one("SELECT * FROM sesiones WHERE id_sesion = %s", (id_sesion,))
+    if sesion_row is None or sesion_row["id_grupo"] != id_grupo:
         raise ValueError("Sesión no encontrada")
-    if sesion_row["Estado"] != "Activa":
+    if sesion_row["estado"] != "Activa":
         raise ValueError("La sesión no está activa")
 
-    sesion = _sesion_row_to_out(sesion_row)
-    turnos_previos = _turnos_de_sesion(id_sesion)
-    turno_actual = sesion["turno_actual"]
-    participantes = sesion["participantes"]
+    turnos_previos = db.fetch_all("SELECT id_cancion, estado FROM canciones_sesion WHERE id_sesion = %s", (id_sesion,))
+    turno_actual = sesion_row["turno_actual"]
+    participantes = sesion_row["participantes"]
     if not participantes:
         raise ValueError("La sesión no tiene participantes")
     cantante = participantes[turno_actual % len(participantes)]
 
-    cola_row_number, cola_row = _primera_fila_en_cola(id_sesion)
+    cola_row = db.fetch_one(
+        "SELECT * FROM canciones_sesion WHERE id_sesion = %s AND estado = 'En cola' ORDER BY orden ASC, id ASC LIMIT 1",
+        (id_sesion,),
+    )
     if cola_row is not None:
         nuevo_turno = len(turnos_previos) + 1
         # Si la fila ya trae cantante(s) elegidos a mano (dueto/grupal), se
         # respetan; si no, se asigna por rotación como siempre.
-        cantante_final = cola_row["Cantada por"] or cantante
-        _cs().update_row(cola_row_number, {"Turno": nuevo_turno, "Cantada por": cantante_final, "Estado": "Pendiente"})
-        cola_row["Turno"] = nuevo_turno
-        cola_row["Cantada por"] = cantante_final
-        cola_row["Estado"] = "Pendiente"
-        _sesiones().update_row(sesion_row_number, {"Turno actual": turno_actual + 1})
+        cantante_final = cola_row["cantada_por"] or cantante
+        db.execute(
+            "UPDATE canciones_sesion SET turno = %s, cantada_por = %s, estado = 'Pendiente' WHERE id = %s",
+            (nuevo_turno, cantante_final, cola_row["id"]),
+        )
+        db.execute("UPDATE sesiones SET turno_actual = %s WHERE id_sesion = %s", (turno_actual + 1, id_sesion))
+        cola_row.update({"turno": nuevo_turno, "cantada_por": cantante_final, "estado": "Pendiente"})
         return _turno_to_out(cola_row)
 
-    ids_usadas = {t["ID Canción"] for t in turnos_previos if t["Estado"] in ("Pendiente", "Cantada", "En cola")}
+    ids_usadas = {t["id_cancion"] for t in turnos_previos if t["estado"] in ("Pendiente", "Cantada", "En cola")}
     todas = canciones_svc.listar(id_grupo)
     disponibles = [c for c in todas if c["id"] not in ids_usadas]
     if not disponibles:
         raise ValueError("No quedan canciones disponibles en la lista")
 
     elegida = random.choice(disponibles)
-
-    row = {
-        "ID Sesión": id_sesion,
-        "ID Grupo": id_grupo,
-        "ID Canción": elegida["id"],
-        "Turno": len(turnos_previos) + 1,
-        "Cantada por": cantante,
-        "Puntuación": "",
-        "Estado": "Pendiente",
-    }
-    _cs().append(row)
-    _sesiones().update_row(sesion_row_number, {"Turno actual": turno_actual + 1})
-
+    nuevo_turno = len(turnos_previos) + 1
+    row = db.fetch_one(
+        "INSERT INTO canciones_sesion (id_sesion, id_grupo, id_cancion, orden, turno, cantada_por, puntuacion, estado) "
+        "VALUES (%s, %s, %s, 0, %s, %s, NULL, 'Pendiente') RETURNING *",
+        (id_sesion, id_grupo, elegida["id"], nuevo_turno, cantante),
+    )
+    db.execute("UPDATE sesiones SET turno_actual = %s WHERE id_sesion = %s", (turno_actual + 1, id_sesion))
     return _turno_to_out(row)
 
 
-def _turno_pendiente(id_sesion: str, id_cancion: str) -> tuple[int, dict]:
-    for i, row in enumerate(_cs().all_rows()):
-        if row["ID Sesión"] == id_sesion and row["ID Canción"] == id_cancion and row["Estado"] == "Pendiente":
-            return i + 2, row  # +2: fila 1 es encabezado, all_rows es 0-indexado
-    raise ValueError("No hay un turno pendiente para esa canción en esta sesión")
+def _turno_pendiente(id_sesion: str, id_cancion: str) -> dict:
+    row = db.fetch_one(
+        "SELECT * FROM canciones_sesion WHERE id_sesion = %s AND id_cancion = %s AND estado = 'Pendiente' "
+        "ORDER BY id ASC LIMIT 1",
+        (id_sesion, id_cancion),
+    )
+    if row is None:
+        raise ValueError("No hay un turno pendiente para esa canción en esta sesión")
+    return row
 
 
-def _fila_turno(id_sesion: str, id_cancion: str) -> tuple[int, dict] | tuple[None, None]:
-    for i, row in enumerate(_cs().all_rows()):
-        if row["ID Sesión"] == id_sesion and row["ID Canción"] == id_cancion:
-            return i + 2, row
-    return None, None
+def _fila_turno(id_sesion: str, id_cancion: str) -> dict | None:
+    return db.fetch_one(
+        "SELECT * FROM canciones_sesion WHERE id_sesion = %s AND id_cancion = %s ORDER BY id ASC LIMIT 1",
+        (id_sesion, id_cancion),
+    )
 
 
 def votar_turno(id_grupo: str, id_sesion: str, id_cancion: str, id_usuario: str, puntuacion: int) -> dict:
-    _, turno_row = _fila_turno(id_sesion, id_cancion)
-    if turno_row is None or turno_row["ID Grupo"] != id_grupo:
+    turno_row = _fila_turno(id_sesion, id_cancion)
+    if turno_row is None or turno_row["id_grupo"] != id_grupo:
         raise ValueError("Turno no encontrado")
-    if turno_row["Estado"] != "Pendiente":
+    if turno_row["estado"] != "Pendiente":
         raise ValueError("Ya no se puede votar esta interpretación")
-    turno = int(turno_row["Turno"] or 0)
 
-    tabla = _votos_turno()
-    existente_row_number = None
-    for i, v in enumerate(tabla.all_rows()):
-        if v["ID Sesión"] == id_sesion and v["ID Canción"] == id_cancion and str(v["Turno"]) == str(turno) and v["ID Usuario"] == id_usuario:
-            existente_row_number = i + 2
-            break
-
-    if existente_row_number is not None:
-        tabla.update_row(existente_row_number, {"Puntuación": puntuacion})
-    else:
-        tabla.append({
-            "ID Grupo": id_grupo,
-            "ID Sesión": id_sesion,
-            "ID Canción": id_cancion,
-            "Turno": turno,
-            "ID Usuario": id_usuario,
-            "Puntuación": puntuacion,
-            "Fecha": now_iso(),
-        })
+    db.execute(
+        "INSERT INTO votos_turno (id_grupo, id_sesion, id_cancion, turno, id_usuario, puntuacion, fecha) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s) "
+        "ON CONFLICT (id_sesion, id_cancion, turno, id_usuario) DO UPDATE SET puntuacion = EXCLUDED.puntuacion",
+        (id_grupo, id_sesion, id_cancion, turno_row["turno"], id_usuario, puntuacion, now_iso()),
+    )
     return votos_turno(id_grupo, id_sesion, id_cancion)
 
 
 def votos_turno(id_grupo: str, id_sesion: str, id_cancion: str) -> dict:
-    _, turno_row = _fila_turno(id_sesion, id_cancion)
-    if turno_row is None or turno_row["ID Grupo"] != id_grupo:
+    turno_row = _fila_turno(id_sesion, id_cancion)
+    if turno_row is None or turno_row["id_grupo"] != id_grupo:
         raise ValueError("Turno no encontrado")
-    turno = str(int(turno_row["Turno"] or 0))
 
-    votos = [
-        {"id_usuario": v["ID Usuario"], "puntuacion": int(v["Puntuación"])}
-        for v in _votos_turno().all_rows()
-        if v["ID Sesión"] == id_sesion and v["ID Canción"] == id_cancion and str(v["Turno"]) == turno
-        and str(v["Puntuación"]).strip().isdigit()
-    ]
+    filas = db.fetch_all(
+        "SELECT id_usuario, puntuacion FROM votos_turno WHERE id_sesion = %s AND id_cancion = %s AND turno = %s",
+        (id_sesion, id_cancion, turno_row["turno"]),
+    )
+    votos = [{"id_usuario": v["id_usuario"], "puntuacion": v["puntuacion"]} for v in filas]
     promedio = round(sum(v["puntuacion"] for v in votos) / len(votos), 2) if votos else None
     return {"votos": votos, "promedio": promedio}
 
 
 def marcar_cantada(id_grupo: str, id_sesion: str, id_cancion: str, puntuacion: int | None) -> dict:
-    row_number, row = _turno_pendiente(id_sesion, id_cancion)
-    if row["ID Grupo"] != id_grupo:
+    row = _turno_pendiente(id_sesion, id_cancion)
+    if row["id_grupo"] != id_grupo:
         raise ValueError("No hay un turno pendiente para esa canción en esta sesión")
 
     votos_info = votos_turno(id_grupo, id_sesion, id_cancion)
@@ -325,46 +282,51 @@ def marcar_cantada(id_grupo: str, id_sesion: str, id_cancion: str, puntuacion: i
     else:
         raise ValueError("Falta la puntuación: nadie votó esta interpretación todavía")
 
-    _cs().update_row(row_number, {"Puntuación": puntuacion_final, "Estado": "Cantada"})
+    db.execute(
+        "UPDATE canciones_sesion SET puntuacion = %s, estado = 'Cantada' WHERE id = %s",
+        (puntuacion_final, row["id"]),
+    )
     canciones_svc.registrar_cantada(id_cancion)
 
     # Un turno puede tener varios cantantes (dueto/grupal) separados por
     # coma en "Cantada por" — cada uno recibe el puntaje completo, no
     # repartido entre todos.
-    for nombre in [n.strip() for n in row["Cantada por"].split(",") if n.strip()]:
+    for nombre in [n.strip() for n in row["cantada_por"].split(",") if n.strip()]:
         usuario = usuarios_svc.get_or_create(id_grupo, nombre)
         usuarios_svc.sumar_puntos(usuario["id"], puntuacion_final)
 
-    row["Puntuación"] = puntuacion_final
-    row["Estado"] = "Cantada"
+    row["puntuacion"] = puntuacion_final
+    row["estado"] = "Cantada"
     return _turno_to_out(row)
 
 
 def saltar(id_grupo: str, id_sesion: str, id_cancion: str) -> dict:
-    row_number, row = _turno_pendiente(id_sesion, id_cancion)
-    if row["ID Grupo"] != id_grupo:
+    row = _turno_pendiente(id_sesion, id_cancion)
+    if row["id_grupo"] != id_grupo:
         raise ValueError("No hay un turno pendiente para esa canción en esta sesión")
-    _cs().update_row(row_number, {"Estado": "Saltada"})
-    row["Estado"] = "Saltada"
+    db.execute("UPDATE canciones_sesion SET estado = 'Saltada' WHERE id = %s", (row["id"],))
+    row["estado"] = "Saltada"
     return _turno_to_out(row)
 
 
 def finalizar(id_grupo: str, id_sesion: str) -> dict:
-    row_number, row = _sesiones().get_by_id("ID Sesión", id_sesion)
-    if row_number is None or row["ID Grupo"] != id_grupo:
+    row = db.fetch_one("SELECT * FROM sesiones WHERE id_sesion = %s", (id_sesion,))
+    if row is None or row["id_grupo"] != id_grupo:
         raise ValueError("Sesión no encontrada")
-    _sesiones().update_row(row_number, {"Estado": "Finalizada"})
-    row["Estado"] = "Finalizada"
+    db.execute("UPDATE sesiones SET estado = 'Finalizada' WHERE id_sesion = %s", (id_sesion,))
+    row["estado"] = "Finalizada"
     return _sesion_row_to_out(row)
 
 
 def historial(id_grupo: str) -> list[dict]:
-    sesiones = [_sesion_row_to_out(r) for r in _sesiones().all_rows() if r["ID Grupo"] == id_grupo]
-    sesiones.sort(key=lambda s: s["fecha"], reverse=True)
-    return sesiones
+    rows = db.fetch_all("SELECT * FROM sesiones WHERE id_grupo = %s ORDER BY fecha DESC", (id_grupo,))
+    return [_sesion_row_to_out(r) for r in rows]
 
 
 def detalle(id_grupo: str, id_sesion: str) -> list[dict]:
-    turnos = [t for t in _turnos_de_sesion(id_sesion) if t["ID Grupo"] == id_grupo]
-    turnos.sort(key=lambda t: int(t["Turno"] or 0))
-    return [_turno_to_out(t) for t in turnos]
+    rows = db.fetch_all(
+        "SELECT * FROM canciones_sesion WHERE id_sesion = %s AND id_grupo = %s "
+        "ORDER BY turno ASC, orden ASC, id ASC",
+        (id_sesion, id_grupo),
+    )
+    return [_turno_to_out(r) for r in rows]

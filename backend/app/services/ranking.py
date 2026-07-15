@@ -3,7 +3,7 @@
 Los badges se calculan al vuelo a partir del historial en
 Canciones_Sesion + Usuarios — no se guardan en ninguna hoja.
 """
-from ..sheets_client import SheetTable
+from .. import db
 from . import canciones as canciones_svc
 from . import usuarios as usuarios_svc
 
@@ -17,20 +17,17 @@ BADGES = {
 
 
 def _cantantes_de_turno(row: dict) -> list[str]:
-    return [n.strip() for n in row["Cantada por"].split(",") if n.strip()]
+    return [n.strip() for n in row["cantada_por"].split(",") if n.strip()]
 
 
 def _cantadas_de(id_grupo: str, nombre: str) -> list[dict]:
     # "Cantada por" puede traer varios nombres separados por coma (dueto o
     # grupal) — cada uno cuenta la canción como propia, no solo el primero.
-    rows = SheetTable("Canciones_Sesion").all_rows()
+    rows = db.fetch_all(
+        "SELECT * FROM canciones_sesion WHERE id_grupo = %s AND estado = 'Cantada'", (id_grupo,)
+    )
     nombre_lower = nombre.strip().lower()
-    return [
-        r for r in rows
-        if r["ID Grupo"] == id_grupo
-        and r["Estado"] == "Cantada"
-        and nombre_lower in [n.lower() for n in _cantantes_de_turno(r)]
-    ]
+    return [r for r in rows if nombre_lower in [n.lower() for n in _cantantes_de_turno(r)]]
 
 
 def badges_de_usuario(id_grupo: str, usuario: dict) -> list[dict]:
@@ -41,7 +38,7 @@ def badges_de_usuario(id_grupo: str, usuario: dict) -> list[dict]:
     if len(cantadas) >= 5:
         codigos.append("maratonista")
 
-    puntuaciones = [int(t["Puntuación"]) for t in cantadas if str(t["Puntuación"]).strip().isdigit()]
+    puntuaciones = [t["puntuacion"] for t in cantadas if t["puntuacion"] is not None]
     if puntuaciones and sum(puntuaciones) / len(puntuaciones) >= 9:
         codigos.append("voz_de_oro")
 
@@ -50,7 +47,7 @@ def badges_de_usuario(id_grupo: str, usuario: dict) -> list[dict]:
 
     generos = set()
     for t in cantadas:
-        c = canciones_svc.get_por_id(t["ID Canción"])
+        c = canciones_svc.get_por_id(t["id_cancion"])
         if c:
             generos.add(c["genero"])
     if len(generos) >= 3:
@@ -60,13 +57,13 @@ def badges_de_usuario(id_grupo: str, usuario: dict) -> list[dict]:
 
 
 def ranking_noche(id_grupo: str, id_sesion: str) -> list[dict]:
-    rows = [
-        r for r in SheetTable("Canciones_Sesion").all_rows()
-        if r["ID Grupo"] == id_grupo and r["ID Sesión"] == id_sesion and r["Estado"] == "Cantada"
-    ]
+    rows = db.fetch_all(
+        "SELECT * FROM canciones_sesion WHERE id_grupo = %s AND id_sesion = %s AND estado = 'Cantada'",
+        (id_grupo, id_sesion),
+    )
     acumulado: dict[str, dict] = {}
     for r in rows:
-        puntos_fila = int(r["Puntuación"]) if str(r["Puntuación"]).strip().isdigit() else 0
+        puntos_fila = r["puntuacion"] or 0
         for nombre in _cantantes_de_turno(r):
             acumulado.setdefault(nombre, {"puntos": 0, "canciones": 0})
             acumulado[nombre]["puntos"] += puntos_fila

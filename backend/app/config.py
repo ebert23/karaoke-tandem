@@ -13,15 +13,9 @@ class Settings(BaseSettings):
     app_env: str = "development"
     cors_origins: str = "http://localhost:5173"
 
-    # ID de la hoja de cálculo (el valor entre /d/ y /edit en la URL).
-    google_sheet_id: str = ""
-
-    # Credenciales de la cuenta de servicio de Google Cloud.
-    # Opción A (recomendada en Render): pega el JSON completo en esta variable.
-    # Opción B (desarrollo local): deja un archivo backend/credentials.json y
-    # no definas esta variable; se usará ese archivo automáticamente.
-    google_service_account_json: str = ""
-    google_credentials_file: Path = BASE_DIR / "credentials.json"
+    # Connection string con pooler de Supabase (puerto 6543, modo
+    # transacción/pgbouncer) — ver backend/db/schema.sql.
+    database_url: str = ""
 
     # Opcional: habilita la búsqueda de canciones en YouTube al agregarlas.
     # Sin esta key, el buscador simplemente no se muestra en el frontend.

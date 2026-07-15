@@ -17,7 +17,6 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .routers import canciones, grupos, health, ranking, retos, sesiones, stats, usuarios, youtube
-from .sheets_client import ensure_sheets
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("karaoketandem")
@@ -25,17 +24,12 @@ logger = logging.getLogger("karaoketandem")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    try:
-        ensure_sheets()
-        logger.info("sheets_ready")
-    except Exception as e:  # No tumbar el server si aún no hay credenciales configuradas.
-        logger.warning("sheets_not_ready: %s", e)
     yield
 
 
 app = FastAPI(
     title="KaraokeTandem API",
-    description="API de la app de karaoke con Google Sheets como base de datos.",
+    description="API de la app de karaoke con Postgres (Supabase) como base de datos.",
     version="1.0.0",
     lifespan=lifespan,
 )

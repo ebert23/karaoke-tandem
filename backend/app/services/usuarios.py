@@ -1,76 +1,59 @@
 """Lógica de negocio de Usuarios. Cada usuario pertenece a un único grupo:
 el mismo nombre en dos grupos distintos genera dos filas independientes.
 """
-from ..sheets_client import SheetTable
+from .. import db
 from .ids import new_id
-
-
-def _table() -> SheetTable:
-    return SheetTable("Usuarios")
 
 
 def _row_to_out(row: dict) -> dict:
     return {
-        "id": row["ID"],
-        "nombre": row["Nombre"],
-        "foto": row["Foto"],
-        "puntos_totales": int(row["Puntos totales"] or 0),
-        "sesiones_jugadas": int(row["Sesiones jugadas"] or 0),
+        "id": row["id"],
+        "nombre": row["nombre"],
+        "foto": row["foto"],
+        "puntos_totales": row["puntos_totales"],
+        "sesiones_jugadas": row["sesiones_jugadas"],
     }
 
 
 def listar(id_grupo: str) -> list[dict]:
-    return [_row_to_out(r) for r in _table().all_rows() if r["ID Grupo"] == id_grupo]
+    rows = db.fetch_all("SELECT * FROM usuarios WHERE id_grupo = %s", (id_grupo,))
+    return [_row_to_out(r) for r in rows]
 
 
 def get_por_id(id_grupo: str, id_usuario: str) -> dict | None:
-    _, row = _table().get_by_id("ID", id_usuario)
-    if row is None or row["ID Grupo"] != id_grupo:
-        return None
-    return _row_to_out(row)
+    row = db.fetch_one("SELECT * FROM usuarios WHERE id = %s AND id_grupo = %s", (id_usuario, id_grupo))
+    return _row_to_out(row) if row else None
 
 
 def get_or_create(id_grupo: str, nombre: str, foto: str = "") -> dict:
     """Busca un usuario por nombre dentro del grupo (sin distinguir
     mayúsculas); lo crea si no existe."""
     nombre = nombre.strip()
-    tabla = _table()
-    for r in tabla.all_rows():
-        if r["ID Grupo"] == id_grupo and r["Nombre"].strip().lower() == nombre.lower():
-            return _row_to_out(r)
-    row = {
-        "ID": new_id("U"),
-        "ID Grupo": id_grupo,
-        "Nombre": nombre,
-        "Foto": foto,
-        "Puntos totales": 0,
-        "Sesiones jugadas": 0,
-    }
-    tabla.append(row)
-    return _row_to_out(row)
+    row = db.fetch_one(
+        "SELECT * FROM usuarios WHERE id_grupo = %s AND lower(nombre) = lower(%s)",
+        (id_grupo, nombre),
+    )
+    if row:
+        return _row_to_out(row)
+    id_usuario = new_id("U")
+    db.execute(
+        "INSERT INTO usuarios (id, id_grupo, nombre, foto, puntos_totales, sesiones_jugadas) "
+        "VALUES (%s, %s, %s, %s, 0, 0)",
+        (id_usuario, id_grupo, nombre, foto),
+    )
+    return {"id": id_usuario, "nombre": nombre, "foto": foto, "puntos_totales": 0, "sesiones_jugadas": 0}
 
 
 def sumar_puntos(id_usuario: str, puntos: int) -> None:
-    tabla = _table()
-    row_number, row = tabla.get_by_id("ID", id_usuario)
-    if row_number is None:
-        return
-    nuevo_total = int(row["Puntos totales"] or 0) + puntos
-    tabla.update_row(row_number, {"Puntos totales": nuevo_total})
+    db.execute("UPDATE usuarios SET puntos_totales = puntos_totales + %s WHERE id = %s", (puntos, id_usuario))
 
 
 def eliminar(id_grupo: str, id_usuario: str) -> None:
-    tabla = _table()
-    row_number, row = tabla.get_by_id("ID", id_usuario)
-    if row_number is None or row["ID Grupo"] != id_grupo:
+    row = db.fetch_one("SELECT id FROM usuarios WHERE id = %s AND id_grupo = %s", (id_usuario, id_grupo))
+    if row is None:
         raise ValueError("Usuario no encontrado en este grupo")
-    tabla.delete_row(row_number)
+    db.execute("DELETE FROM usuarios WHERE id = %s", (id_usuario,))
 
 
 def incrementar_sesiones(id_usuario: str) -> None:
-    tabla = _table()
-    row_number, row = tabla.get_by_id("ID", id_usuario)
-    if row_number is None:
-        return
-    nuevas = int(row["Sesiones jugadas"] or 0) + 1
-    tabla.update_row(row_number, {"Sesiones jugadas": nuevas})
+    db.execute("UPDATE usuarios SET sesiones_jugadas = sesiones_jugadas + 1 WHERE id = %s", (id_usuario,))
