@@ -187,6 +187,16 @@ class SesionUnirseRequest(BaseModel):
     nombre: str = Field(min_length=1, max_length=80)
 
 
+class ColaAccionRequest(BaseModel):
+    # Quien ejecuta la acción (debe ser admin del grupo) — se verifica en el
+    # servicio, igual que MiembroAccionRequest.
+    id_usuario_actor: str
+
+
+class MoverColaRequest(ColaAccionRequest):
+    direccion: str = Field(pattern="^(arriba|abajo)$")
+
+
 class VotarTurnoRequest(BaseModel):
     id_usuario: str
     puntuacion: int = Field(ge=1, le=10)

@@ -4,8 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from ..deps import get_grupo_id
 from ..schemas import (
     CancionSesionOut,
+    ColaAccionRequest,
     ColaRequest,
     MarcarCantadaRequest,
+    MoverColaRequest,
     SesionCreate,
     SesionOut,
     SesionUnirseRequest,
@@ -60,6 +62,26 @@ def unirse(id_sesion: str, data: SesionUnirseRequest, id_grupo: str = Depends(ge
 def agregar_a_cola(id_sesion: str, data: ColaRequest, id_grupo: str = Depends(get_grupo_id)):
     try:
         return svc.agregar_a_cola(id_grupo, id_sesion, data.id_cancion, data.cantantes)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.delete("/{id_sesion}/cola/{id_cancion}", status_code=204)
+def quitar_de_cola(id_sesion: str, id_cancion: str, data: ColaAccionRequest, id_grupo: str = Depends(get_grupo_id)):
+    try:
+        svc.quitar_de_cola(id_grupo, id_sesion, id_cancion, data.id_usuario_actor)
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.post("/{id_sesion}/cola/{id_cancion}/mover", response_model=list[CancionSesionOut])
+def mover_en_cola(id_sesion: str, id_cancion: str, data: MoverColaRequest, id_grupo: str = Depends(get_grupo_id)):
+    try:
+        return svc.mover_en_cola(id_grupo, id_sesion, id_cancion, data.id_usuario_actor, data.direccion)
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
     except ValueError as e:
         raise HTTPException(400, str(e))
 

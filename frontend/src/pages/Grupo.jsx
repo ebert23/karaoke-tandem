@@ -4,6 +4,7 @@ import { useGroup } from "../lib/GroupContext.jsx";
 import { useIdentity } from "../lib/IdentityContext.jsx";
 import { useToast } from "../lib/ToastContext.jsx";
 import { api } from "../lib/api.js";
+import { linkInvitacion } from "../lib/invite.js";
 
 export default function Grupo() {
   const { grupo, setGrupo, salirDelGrupo } = useGroup();
@@ -15,7 +16,7 @@ export default function Grupo() {
   const [ocupado, setOcupado] = useState(""); // id del miembro con una acción en curso
 
   const esAdmin = grupo.admins?.includes(usuario.id) ?? false;
-  const linkInvitacion = `${window.location.origin}${window.location.pathname}#/?codigo=${grupo.codigo}`;
+  const link = linkInvitacion(grupo);
 
   useEffect(() => {
     let cancelado = false;
@@ -53,7 +54,7 @@ export default function Grupo() {
 
   async function copiarLink() {
     try {
-      await navigator.clipboard.writeText(linkInvitacion);
+      await navigator.clipboard.writeText(link);
       push("Link copiado — pegalo donde quieras 📋", "success");
     } catch {
       push("No se pudo copiar. Compartí el código a mano: " + grupo.codigo, "error");
@@ -62,12 +63,12 @@ export default function Grupo() {
 
   // El link lleva directo a la sala (auto-join al abrirlo); el código queda
   // como respaldo por si a alguien no le abre el link.
-  const textoInvitacion = `¡Únete a "${grupo.nombre}" en KaraokeTandem! 🎤\n${linkInvitacion}\n(o con el código ${grupo.codigo})`;
+  const textoInvitacion = `¡Únete a "${grupo.nombre}" en KaraokeTandem! 🎤\n${link}\n(o con el código ${grupo.codigo})`;
 
   async function compartir() {
     if (navigator.share) {
       try {
-        await navigator.share({ title: "KaraokeTandem", text: textoInvitacion, url: linkInvitacion });
+        await navigator.share({ title: "KaraokeTandem", text: textoInvitacion, url: link });
       } catch {
         /* usuario canceló el share */
       }

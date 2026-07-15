@@ -6,6 +6,7 @@ import random
 
 from ..sheets_client import SheetTable
 from . import canciones as canciones_svc
+from . import grupos as grupos_svc
 from . import usuarios as usuarios_svc
 from .ids import new_id, now_iso
 
@@ -150,6 +151,54 @@ def agregar_a_cola(id_grupo: str, id_sesion: str, id_cancion: str, cantantes: li
     }
     _cs().append(row)
     return _turno_to_out(row)
+
+
+def _requiere_admin(id_grupo: str, id_usuario_actor: str) -> None:
+    grupo = grupos_svc.get_por_id(id_grupo)
+    if grupo is None:
+        raise ValueError("Grupo no encontrado")
+    if not grupos_svc.es_admin(grupo, id_usuario_actor):
+        raise PermissionError("Solo un admin puede modificar la cola")
+
+
+def quitar_de_cola(id_grupo: str, id_sesion: str, id_cancion: str, id_usuario_actor: str) -> None:
+    _requiere_admin(id_grupo, id_usuario_actor)
+    row_number, row = _fila_turno(id_sesion, id_cancion)
+    if row_number is None or row["ID Grupo"] != id_grupo:
+        raise ValueError("Canción no encontrada en la sesión")
+    if row["Estado"] != "En cola":
+        raise ValueError("Esa canción ya no está en la cola (ya se promovió o se cantó)")
+    _cs().delete_row(row_number)
+
+
+def mover_en_cola(id_grupo: str, id_sesion: str, id_cancion: str, id_usuario_actor: str, direccion: str) -> list[dict]:
+    """Reordena la cola intercambiando el contenido de dos filas vecinas — el
+    orden de la cola es el orden físico de las filas "En cola" en la hoja
+    (lo usa _primera_fila_en_cola), así que no hace falta una columna de
+    posición nueva."""
+    _requiere_admin(id_grupo, id_usuario_actor)
+    filas_cola = [
+        (i + 2, row)  # +2: fila 1 es encabezado, all_rows es 0-indexado
+        for i, row in enumerate(_cs().all_rows())
+        if row["ID Sesión"] == id_sesion and row["Estado"] == "En cola"
+    ]
+    posicion = next((i for i, (_, row) in enumerate(filas_cola) if row["ID Canción"] == id_cancion), None)
+    if posicion is None:
+        raise ValueError("Canción no encontrada en la cola")
+
+    vecino = posicion - 1 if direccion == "arriba" else posicion + 1
+    if vecino < 0 or vecino >= len(filas_cola):
+        raise ValueError("Esa canción ya está en un extremo de la cola")
+
+    row_number_a, row_a = filas_cola[posicion]
+    row_number_b, row_b = filas_cola[vecino]
+    campos = ["ID Canción", "Cantada por"]
+    _cs().update_row(row_number_a, {c: row_b[c] for c in campos})
+    _cs().update_row(row_number_b, {c: row_a[c] for c in campos})
+    row_a["ID Canción"], row_b["ID Canción"] = row_b["ID Canción"], row_a["ID Canción"]
+    row_a["Cantada por"], row_b["Cantada por"] = row_b["Cantada por"], row_a["Cantada por"]
+
+    return [_turno_to_out(r) for _, r in filas_cola]
 
 
 def siguiente_cancion(id_grupo: str, id_sesion: str) -> dict:

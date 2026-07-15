@@ -13,6 +13,7 @@ import Karaoke from "./pages/Karaoke.jsx";
 import Ranking from "./pages/Ranking.jsx";
 import Retos from "./pages/Retos.jsx";
 import Semana from "./pages/Semana.jsx";
+import TV from "./pages/TV.jsx";
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
           <IdentityProvider>
             <IdentityGate>
               <Routes>
+                <Route path="tv" element={<TV />} />
                 <Route element={<Shell />}>
                   <Route index element={<Semana />} />
                   <Route path="karaoke" element={<Karaoke />} />

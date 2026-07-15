@@ -1,17 +1,15 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { IconBell, IconCheck, IconClock, IconPlus, IconSkip, IconUsers } from "../components/Icons.jsx";
+import { IconBell, IconCheck, IconClock, IconPlus, IconSkip, IconTrash, IconUsers } from "../components/Icons.jsx";
+import { useGroup } from "../lib/GroupContext.jsx";
 import { useIdentity } from "../lib/IdentityContext.jsx";
 import { useToast } from "../lib/ToastContext.jsx";
 import { api } from "../lib/api.js";
 import { formatCantantes } from "../lib/format.js";
+import { POLL_MS } from "../lib/constants.js";
 
 const TIMER_INICIAL = 240; // 4 minutos
 const NOTIF_STORAGE_KEY = "kt_notif_enabled";
-// 15s: la app ya viene rozando la cuota de lecturas de Google Sheets, así
-// que este sondeo (uno por pestaña de Karaoke abierta) va más despacio que
-// el de votación en vivo (4s) para no sumar presión extra.
-const POLL_MS = 15000;
 
 function cantantesDeTurno(t) {
   return (t.cantada_por || "")
@@ -235,6 +233,7 @@ function VotacionEnVivo({ sesion, pendiente, usuario, onListoParaMarcar }) {
 
 export default function Karaoke() {
   const { usuario } = useIdentity();
+  const { grupo } = useGroup();
   const { push } = useToast();
   const navigate = useNavigate();
   const [sesion, setSesion] = useState(undefined); // undefined = cargando, null = sin sesión
@@ -247,7 +246,10 @@ export default function Karaoke() {
   const [cancionExpandida, setCancionExpandida] = useState(null);
   const [cantantesElegidos, setCantantesElegidos] = useState([]);
   const [notifActivas, setNotifActivas] = useState(() => localStorage.getItem(NOTIF_STORAGE_KEY) === "1");
+  const [modo, setModo] = useState("aleatorio"); // "aleatorio" | "cola" — se carga por sesión al abrirla
+  const [moviendoCola, setMoviendoCola] = useState("");
   const ultimoTurnoNotificado = useRef(null);
+  const esAdmin = grupo.admins?.includes(usuario.id) ?? false;
 
   async function cargarTodo() {
     try {
@@ -277,6 +279,16 @@ export default function Karaoke() {
     cargarTodo();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!sesion) return;
+    setModo(localStorage.getItem(`kt_modo_sesion_${sesion.id_sesion}`) === "cola" ? "cola" : "aleatorio");
+  }, [sesion?.id_sesion]);
+
+  function cambiarModo(nuevoModo) {
+    setModo(nuevoModo);
+    if (sesion) localStorage.setItem(`kt_modo_sesion_${sesion.id_sesion}`, nuevoModo);
+  }
 
   // Sondeo corto mientras la sesión está activa: mantiene la cola/turno al
   // día entre participantes y detecta cuándo le toca cantar al usuario.
@@ -339,6 +351,28 @@ export default function Karaoke() {
     } finally {
       setCancionExpandida(null);
       setCantantesElegidos([]);
+    }
+  }
+
+  async function moverEnCola(idCancion, direccion) {
+    setMoviendoCola(idCancion);
+    try {
+      const nuevaCola = await api.moverEnCola(sesion.id_sesion, idCancion, usuario.id, direccion);
+      setTurnos((prev) => [...prev.filter((t) => t.estado !== "En cola"), ...nuevaCola]);
+    } catch (e) {
+      push(e.message, "error");
+    } finally {
+      setMoviendoCola("");
+    }
+  }
+
+  async function quitarDeCola(idCancion) {
+    try {
+      await api.quitarDeCola(sesion.id_sesion, idCancion, usuario.id);
+      setTurnos((prev) => prev.filter((t) => t.id_cancion !== idCancion));
+      push("Sacada de la cola", "success");
+    } catch (e) {
+      push(e.message, "error");
     }
   }
 
@@ -416,6 +450,9 @@ export default function Karaoke() {
       <div className="flex items-center justify-between">
         <h2 className="title-glow text-2xl">Karaoke en vivo</h2>
         <div className="flex items-center gap-2">
+          <a href="#/tv" target="_blank" rel="noreferrer" className="btn-ghost !text-xs !py-1.5">
+            📺 Modo TV
+          </a>
           <button
             onClick={alternarNotificaciones}
             className={`btn-ghost !text-xs !py-1.5 ${notifActivas ? "!text-neon-pinklight !border-neon-pinklight/40" : ""}`}
@@ -478,20 +515,48 @@ export default function Karaoke() {
       ) : (
         <div className="card p-8 text-center">
           <p className="text-white/50 mb-4">
-            {cola.length > 0 ? `Sigue "${cola[0].cancion?.titulo}" (primera en la cola)` : "Listo para el siguiente turno"}
+            {cola.length > 0
+              ? `Sigue "${cola[0].cancion?.titulo}" (primera en la cola)`
+              : modo === "cola"
+              ? "La cola está vacía — agregá canciones para seguir"
+              : "Listo para el siguiente turno"}
           </p>
-          <button onClick={siguiente} className="btn-primary text-lg !px-8 !py-3" disabled={pidiendo}>
+          <button
+            onClick={siguiente}
+            className="btn-primary text-lg !px-8 !py-3"
+            disabled={pidiendo || (modo === "cola" && cola.length === 0)}
+          >
             {pidiendo ? "Eligiendo…" : cola.length > 0 ? "▶ Siguiente de la cola" : "🎲 Siguiente canción"}
           </button>
         </div>
       )}
 
       <div className="card p-4">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
           <p className="label !mb-0">Cola ({cola.length})</p>
-          <button onClick={() => setMostrarCola((m) => !m)} className="btn-ghost !text-xs !py-1.5">
-            <IconPlus /> {mostrarCola ? "Cerrar" : "Agregar canción"}
-          </button>
+          <div className="flex items-center gap-1.5">
+            <div className="flex rounded-lg border border-white/10 overflow-hidden text-xs">
+              <button
+                onClick={() => cambiarModo("aleatorio")}
+                className={`px-2.5 py-1.5 font-semibold transition-colors ${
+                  modo === "aleatorio" ? "bg-gradient-to-r from-neon-purple/80 to-neon-pink/80 text-white" : "text-white/50 hover:text-white"
+                }`}
+              >
+                🎲 Aleatorio
+              </button>
+              <button
+                onClick={() => cambiarModo("cola")}
+                className={`px-2.5 py-1.5 font-semibold transition-colors ${
+                  modo === "cola" ? "bg-gradient-to-r from-neon-purple/80 to-neon-pink/80 text-white" : "text-white/50 hover:text-white"
+                }`}
+              >
+                📋 Cola
+              </button>
+            </div>
+            <button onClick={() => setMostrarCola((m) => !m)} className="btn-ghost !text-xs !py-1.5">
+              <IconPlus /> {mostrarCola ? "Cerrar" : "Agregar canción"}
+            </button>
+          </div>
         </div>
         {cola.length > 0 && (
           <div className="flex flex-col gap-1.5 mb-2">
@@ -502,6 +567,29 @@ export default function Karaoke() {
                   {t.cancion?.titulo} <span className="text-white/40">— {t.cancion?.artista}</span>
                   {t.cantada_por && <span className="text-white/40"> · {formatCantantes(t.cantada_por)}</span>}
                 </span>
+                {esAdmin && (
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => moverEnCola(t.id_cancion, "arriba")}
+                      disabled={i === 0 || moviendoCola === t.id_cancion}
+                      className="text-white/40 hover:text-white disabled:opacity-20 px-1"
+                      title="Subir"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      onClick={() => moverEnCola(t.id_cancion, "abajo")}
+                      disabled={i === cola.length - 1 || moviendoCola === t.id_cancion}
+                      className="text-white/40 hover:text-white disabled:opacity-20 px-1"
+                      title="Bajar"
+                    >
+                      ↓
+                    </button>
+                    <button onClick={() => quitarDeCola(t.id_cancion)} className="text-white/40 hover:text-red-400 px-1" title="Quitar de la cola">
+                      <IconTrash />
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
