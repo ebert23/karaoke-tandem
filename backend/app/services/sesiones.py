@@ -173,12 +173,24 @@ def mover_en_cola(id_grupo: str, id_sesion: str, id_cancion: str, id_usuario_act
     return [_turno_to_out(r) for r in filas_cola]
 
 
-def siguiente_cancion(id_grupo: str, id_sesion: str) -> dict:
+def siguiente_cancion(id_grupo: str, id_sesion: str, id_usuario_actor: str) -> dict:
+    _requiere_admin(id_grupo, id_usuario_actor)
     sesion_row = db.fetch_one("SELECT * FROM sesiones WHERE id_sesion = %s", (id_sesion,))
     if sesion_row is None or sesion_row["id_grupo"] != id_grupo:
         raise ValueError("Sesión no encontrada")
     if sesion_row["estado"] != "Activa":
         raise ValueError("La sesión no está activa")
+
+    # Si dos clics de "siguiente" llegan casi juntos (dos personas con
+    # permiso, o un doble clic) ya no se crean dos turnos "Pendiente" en
+    # paralelo — el segundo llamado simplemente recibe el que ya quedó
+    # armado, así todos terminan viendo la misma canción.
+    pendiente_existente = db.fetch_one(
+        "SELECT * FROM canciones_sesion WHERE id_sesion = %s AND estado = 'Pendiente' ORDER BY id DESC LIMIT 1",
+        (id_sesion,),
+    )
+    if pendiente_existente is not None:
+        return _turno_to_out(pendiente_existente)
 
     turnos_previos = db.fetch_all("SELECT id_cancion, estado FROM canciones_sesion WHERE id_sesion = %s", (id_sesion,))
     turno_actual = sesion_row["turno_actual"]

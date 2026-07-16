@@ -51,9 +51,27 @@ function EditarCancionForm({ cancion, onGuardar, onCancelar, guardando }) {
         <label className="label">Artista</label>
         <input className="input" value={form.artista} onChange={(e) => setForm({ ...form, artista: e.target.value })} maxLength={200} required />
       </div>
-      <div>
+      <div className="sm:col-span-2">
         <label className="label">Género</label>
-        <input className="input" value={form.genero} onChange={(e) => setForm({ ...form, genero: e.target.value })} required />
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {GENEROS_SUGERIDOS.map((g) => (
+            <button
+              type="button"
+              key={g}
+              onClick={() => setForm({ ...form, genero: g })}
+              className={form.genero === g ? "chip-active" : "chip"}
+            >
+              {g}
+            </button>
+          ))}
+        </div>
+        <input
+          className="input"
+          placeholder="U otro género…"
+          value={form.genero}
+          onChange={(e) => setForm({ ...form, genero: e.target.value })}
+          required
+        />
       </div>
       <div>
         <label className="label">Link de YouTube (opcional)</label>
@@ -407,14 +425,27 @@ export default function Semana() {
             <label className="label">Artista</label>
             <input className="input" value={form.artista} onChange={(e) => setForm({ ...form, artista: e.target.value })} maxLength={200} required />
           </div>
-          <div>
+          <div className="sm:col-span-2">
             <label className="label">Género</label>
-            <input className="input" list="generos-list" value={form.genero} onChange={(e) => setForm({ ...form, genero: e.target.value })} required />
-            <datalist id="generos-list">
+            <div className="flex flex-wrap gap-1.5 mb-2">
               {GENEROS_SUGERIDOS.map((g) => (
-                <option key={g} value={g} />
+                <button
+                  type="button"
+                  key={g}
+                  onClick={() => setForm({ ...form, genero: g })}
+                  className={form.genero === g ? "chip-active" : "chip"}
+                >
+                  {g}
+                </button>
               ))}
-            </datalist>
+            </div>
+            <input
+              className="input"
+              placeholder="U otro género…"
+              value={form.genero}
+              onChange={(e) => setForm({ ...form, genero: e.target.value })}
+              required
+            />
           </div>
           <div>
             <label className="label">Link de YouTube (opcional)</label>

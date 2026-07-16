@@ -409,7 +409,7 @@ export default function Karaoke() {
   async function siguiente() {
     setPidiendo(true);
     try {
-      const t = await api.siguienteCancion(sesion.id_sesion);
+      const t = await api.siguienteCancion(sesion.id_sesion, usuario.id);
       // Comparamos por id_cancion (no por turno): una canción en cola tiene
       // turno=0 como placeholder hasta que "siguiente" la promueve y le
       // asigna el turno real, así que filtrar por turno dejaría la fila
@@ -557,13 +557,17 @@ export default function Karaoke() {
               ? "La cola está vacía — agregá canciones para seguir"
               : "Listo para el siguiente turno"}
           </p>
-          <button
-            onClick={siguiente}
-            className="btn-primary text-lg !px-8 !py-3"
-            disabled={pidiendo || (modo === "cola" && cola.length === 0)}
-          >
-            {pidiendo ? "Eligiendo…" : cola.length > 0 ? "▶ Siguiente de la cola" : "🎲 Siguiente canción"}
-          </button>
+          {esAdmin ? (
+            <button
+              onClick={siguiente}
+              className="btn-primary text-lg !px-8 !py-3"
+              disabled={pidiendo || (modo === "cola" && cola.length === 0)}
+            >
+              {pidiendo ? "Eligiendo…" : cola.length > 0 ? "▶ Siguiente de la cola" : "🎲 Siguiente canción"}
+            </button>
+          ) : (
+            <p className="text-white/30 text-sm">Esperando a que el admin elija la siguiente canción…</p>
+          )}
         </div>
       )}
 
