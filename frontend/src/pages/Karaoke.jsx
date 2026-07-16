@@ -262,6 +262,16 @@ export default function Karaoke() {
   const ultimoTurnoNotificado = useRef(null);
   const esAdmin = grupo.admins?.includes(usuario.id) ?? false;
 
+  // Si alguien abrió la puntuación manual (porque todavía nadie había
+  // votado) y justo después entra un voto en vivo, hay que salir de ese
+  // modo: si no, quedaba mostrando "Nadie votó" con los botones 1-10 a la
+  // vez que la tarjeta de votación en vivo ya mostraba un voto real — y el
+  // valor manual ni se iba a usar (el backend siempre prioriza el promedio
+  // en vivo sobre la puntuación manual si hay al menos un voto).
+  useEffect(() => {
+    if (hayVotos) setPuntuando(false);
+  }, [hayVotos]);
+
   async function cargarTodo() {
     try {
       let s = await api.sesionActiva();
@@ -467,7 +477,7 @@ export default function Karaoke() {
 
   return (
     <>
-      {mostrarReto && <RetoModal onClose={() => setMostrarReto(false)} />}
+      {mostrarReto && <RetoModal participantes={sesion.participantes} onClose={() => setMostrarReto(false)} />}
       <div className="flex flex-col gap-4 max-w-xl mx-auto">
       <div className="flex items-center justify-between">
         <h2 className="title-glow text-2xl">Karaoke en vivo</h2>

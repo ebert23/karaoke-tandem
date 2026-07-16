@@ -71,8 +71,13 @@ function Confeti() {
   );
 }
 
-export default function RetoModal({ onClose }) {
+export default function RetoModal({ participantes = [], onClose }) {
   const [mensaje] = useState(mensajeAleatorio);
+  // El "elegido" se sortea una sola vez al abrir el modal — "Otro reto"
+  // cambia el desafío, no a quién le toca.
+  const [elegido] = useState(() =>
+    participantes.length ? participantes[Math.floor(Math.random() * participantes.length)] : null
+  );
   const [etapa, setEtapa] = useState("hype"); // "hype" | "reto"
   const [reto, setReto] = useState(null);
   const [cancionAsignada, setCancionAsignada] = useState(null);
@@ -102,6 +107,11 @@ export default function RetoModal({ onClose }) {
       <Confeti />
       {etapa === "hype" ? (
         <div className="relative card p-8 max-w-md text-center animate-retoEntrada shadow-neon">
+          {elegido && (
+            <p className="text-neon-pinklight uppercase tracking-widest text-sm font-semibold mb-2">
+              🎯 Le toca a {elegido}
+            </p>
+          )}
           <p className="font-display font-extrabold text-2xl leading-snug mb-6">{mensaje}</p>
           <button
             onClick={() => setEtapa("reto")}
@@ -117,6 +127,9 @@ export default function RetoModal({ onClose }) {
             COLOR_CATEGORIA[reto?.categoria] || COLOR_CATEGORIA.Normal
           }`}
         >
+          {elegido && (
+            <p className="uppercase tracking-widest text-sm font-semibold mb-2 !text-white/90">🎯 Le toca a {elegido}</p>
+          )}
           <span className="chip !bg-black/20 !border-white/20 mb-4 inline-block">
             {reto?.categoria} · {reto?.dificultad}
           </span>
