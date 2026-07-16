@@ -256,6 +256,7 @@ export default function Karaoke() {
   const [notifActivas, setNotifActivas] = useState(() => localStorage.getItem(NOTIF_STORAGE_KEY) === "1");
   const [modo, setModo] = useState("aleatorio"); // "aleatorio" | "cola" — se carga por sesión al abrirla
   const [moviendoCola, setMoviendoCola] = useState("");
+  const [marcando, setMarcando] = useState(false);
   const [mostrarReto, setMostrarReto] = useState(false);
   const [cancionesDesdeReto, setCancionesDesdeReto] = useState(0);
   const [proximoRetoEn, setProximoRetoEn] = useState(() => nuevoUmbralReto());
@@ -423,6 +424,8 @@ export default function Karaoke() {
   }
 
   async function marcarCantada(puntuacion) {
+    if (marcando) return;
+    setMarcando(true);
     try {
       const actualizado = await api.marcarCantada(sesion.id_sesion, pendiente.id_cancion, puntuacion);
       setTurnos((prev) => prev.map((t) => (t.turno === actualizado.turno ? actualizado : t)));
@@ -439,15 +442,21 @@ export default function Karaoke() {
       }
     } catch (e) {
       push(e.message, "error");
+    } finally {
+      setMarcando(false);
     }
   }
 
   async function saltar() {
+    if (marcando) return;
+    setMarcando(true);
     try {
       const actualizado = await api.saltarCancion(sesion.id_sesion, pendiente.id_cancion);
       setTurnos((prev) => prev.map((t) => (t.turno === actualizado.turno ? actualizado : t)));
     } catch (e) {
       push(e.message, "error");
+    } finally {
+      setMarcando(false);
     }
   }
 
@@ -534,11 +543,12 @@ export default function Karaoke() {
               <div className="flex gap-2 justify-center mt-2">
                 <button
                   onClick={() => (hayVotos ? marcarCantada(undefined) : setPuntuando(true))}
+                  disabled={marcando}
                   className="btn-primary flex-1"
                 >
                   <IconCheck /> {hayVotos ? "Cerrar y marcar cantada" : "Cantada"}
                 </button>
-                <button onClick={saltar} className="btn-ghost flex-1">
+                <button onClick={saltar} disabled={marcando} className="btn-ghost flex-1">
                   <IconSkip /> Saltar
                 </button>
               </div>

@@ -25,7 +25,17 @@ async function request(path, options = {}) {
     let detail = res.statusText;
     try {
       const body = await res.json();
-      detail = body.detail || detail;
+      // body.detail suele ser un string (HTTPException de FastAPI), pero en
+      // un 422 de validación es una lista de objetos {loc, msg, type} — si
+      // se pasa tal cual a Error(), el mensaje termina siendo el inservible
+      // "[object Object]" (toString de un objeto/array de objetos).
+      if (typeof body.detail === "string") {
+        detail = body.detail;
+      } else if (Array.isArray(body.detail)) {
+        detail = body.detail.map((d) => d.msg || JSON.stringify(d)).join("; ");
+      } else if (body.detail) {
+        detail = JSON.stringify(body.detail);
+      }
     } catch {
       /* respuesta sin JSON */
     }
