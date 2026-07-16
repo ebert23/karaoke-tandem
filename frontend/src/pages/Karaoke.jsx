@@ -20,10 +20,30 @@ function cantantesDeTurno(t) {
     .filter(Boolean);
 }
 
-// Cada cuántas canciones cantadas toca un reto automático: 3 a 5, al azar
-// cada vez, para que no se vuelva predecible.
-function nuevoUmbralReto() {
-  return 3 + Math.floor(Math.random() * 3);
+function hashCadena(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  return h >>> 0;
+}
+
+// Generador de umbrales "cada cuántas canciones cantadas toca un reto
+// automático" (3 a 5, al azar) sembrado con el id de la sesión: dos
+// celulares distintos conectados a la misma sesión calculan exactamente la
+// misma secuencia de umbrales, así el reto dispara en el mismo punto sin
+// importar desde qué dispositivo se fueron marcando las canciones como
+// cantadas (antes el conteo era un estado local por pestaña, y si las
+// canciones se marcaban desde celulares distintos ese contador nunca
+// llegaba al umbral en ninguno de los dos).
+function crearGeneradorUmbrales(idSesion) {
+  let seed = hashCadena(idSesion) || 1;
+  return function siguienteDelta() {
+    seed |= 0;
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    const r = ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    return 3 + Math.floor(r * 3);
+  };
 }
 
 function reproducirBeep() {
@@ -258,10 +278,16 @@ export default function Karaoke() {
   const [moviendoCola, setMoviendoCola] = useState("");
   const [marcando, setMarcando] = useState(false);
   const [mostrarReto, setMostrarReto] = useState(false);
-  const [cancionesDesdeReto, setCancionesDesdeReto] = useState(0);
-  const [proximoRetoEn, setProximoRetoEn] = useState(() => nuevoUmbralReto());
+  const [proximoUmbralReto, setProximoUmbralReto] = useState(null);
   const ultimoTurnoNotificado = useRef(null);
+  const generadorRetoRef = useRef(null);
+  const sesionInicializadaRetoRef = useRef(null);
+  const versionRef = useRef(0);
   const esAdmin = grupo.admins?.includes(usuario.id) ?? false;
+
+  function marcarAccionLocal() {
+    versionRef.current += 1;
+  }
 
   // Si alguien abrió la puntuación manual (porque todavía nadie había
   // votado) y justo después entra un voto en vivo, hay que salir de ese
@@ -312,13 +338,45 @@ export default function Karaoke() {
     if (sesion) localStorage.setItem(`kt_modo_sesion_${sesion.id_sesion}`, nuevoModo);
   }
 
+  // Arma el generador de umbrales sembrado con el id de sesión (una sola vez
+  // por sesión) y calcula el primer umbral relativo a las canciones que ya
+  // estaban cantadas al entrar — así todos los celulares conectados a la
+  // misma sesión coinciden en cuándo toca el próximo reto automático.
+  useEffect(() => {
+    if (!sesion || sesionInicializadaRetoRef.current === sesion.id_sesion) return;
+    sesionInicializadaRetoRef.current = sesion.id_sesion;
+    generadorRetoRef.current = crearGeneradorUmbrales(sesion.id_sesion);
+    const cantadasAlEntrar = turnos.filter((t) => t.estado === "Cantada").length;
+    setProximoUmbralReto(cantadasAlEntrar + generadorRetoRef.current());
+  }, [sesion, turnos]);
+
+  // Dispara el reto automático en base a las canciones YA cantadas (dato
+  // sincronizado por sondeo entre todos los dispositivos), no a un contador
+  // local que solo subía si el reto lo marcaba cantada esta misma pestaña.
+  useEffect(() => {
+    if (proximoUmbralReto === null || !generadorRetoRef.current) return;
+    const cantadas = turnos.filter((t) => t.estado === "Cantada").length;
+    if (cantadas >= proximoUmbralReto) {
+      setMostrarReto(true);
+      setProximoUmbralReto(cantadas + generadorRetoRef.current());
+    }
+  }, [turnos, proximoUmbralReto]);
+
   // Sondeo corto mientras la sesión está activa: mantiene la cola/turno al
   // día entre participantes y detecta cuándo le toca cantar al usuario.
   useEffect(() => {
     if (!sesion || sesion.estado !== "Activa") return;
     const id = setInterval(async () => {
+      const versionAlEmpezar = versionRef.current;
       try {
         const nuevosTurnos = await api.detalleSesion(sesion.id_sesion);
+        // Si mientras esta lectura estaba en vuelo el propio usuario hizo
+        // una acción local (siguiente/cantada/saltar/cola), esta respuesta
+        // puede ser más vieja que lo que ya está en pantalla — aplicarla
+        // pisaría el turno recién promovido y la pantalla "parpadeaba"
+        // volviendo a "Listo para el siguiente turno". La descartamos: el
+        // próximo sondeo, 20s después, ya trae el estado al día.
+        if (versionRef.current !== versionAlEmpezar) return;
         setTurnos(nuevosTurnos);
         const miTurno = nuevosTurnos.find(
           (t) => t.estado === "Pendiente" && cantantesDeTurno(t).includes(usuario.nombre.toLowerCase())
@@ -364,6 +422,7 @@ export default function Karaoke() {
   const disponiblesParaCola = canciones.filter((c) => !idsUsadas.has(c.id));
 
   async function agregarACola(idCancion, cantantes = []) {
+    marcarAccionLocal();
     try {
       const t = await api.agregarACola(sesion.id_sesion, idCancion, cantantes);
       setTurnos((prev) => [...prev, t]);
@@ -378,6 +437,7 @@ export default function Karaoke() {
 
   async function moverEnCola(idCancion, direccion) {
     setMoviendoCola(idCancion);
+    marcarAccionLocal();
     try {
       const nuevaCola = await api.moverEnCola(sesion.id_sesion, idCancion, usuario.id, direccion);
       setTurnos((prev) => [...prev.filter((t) => t.estado !== "En cola"), ...nuevaCola]);
@@ -389,6 +449,7 @@ export default function Karaoke() {
   }
 
   async function quitarDeCola(idCancion) {
+    marcarAccionLocal();
     try {
       await api.quitarDeCola(sesion.id_sesion, idCancion, usuario.id);
       setTurnos((prev) => prev.filter((t) => t.id_cancion !== idCancion));
@@ -409,6 +470,7 @@ export default function Karaoke() {
 
   async function siguiente() {
     setPidiendo(true);
+    marcarAccionLocal();
     try {
       const t = await api.siguienteCancion(sesion.id_sesion, usuario.id);
       // Comparamos por id_cancion (no por turno): una canción en cola tiene
@@ -426,20 +488,12 @@ export default function Karaoke() {
   async function marcarCantada(puntuacion) {
     if (marcando) return;
     setMarcando(true);
+    marcarAccionLocal();
     try {
       const actualizado = await api.marcarCantada(sesion.id_sesion, pendiente.id_cancion, puntuacion);
       setTurnos((prev) => prev.map((t) => (t.turno === actualizado.turno ? actualizado : t)));
       setPuntuando(false);
       push("¡Puntuación registrada! 🌟", "success");
-
-      const cancionesNuevas = cancionesDesdeReto + 1;
-      if (cancionesNuevas >= proximoRetoEn) {
-        setCancionesDesdeReto(0);
-        setProximoRetoEn(nuevoUmbralReto());
-        setMostrarReto(true);
-      } else {
-        setCancionesDesdeReto(cancionesNuevas);
-      }
     } catch (e) {
       push(e.message, "error");
     } finally {
@@ -450,6 +504,7 @@ export default function Karaoke() {
   async function saltar() {
     if (marcando) return;
     setMarcando(true);
+    marcarAccionLocal();
     try {
       const actualizado = await api.saltarCancion(sesion.id_sesion, pendiente.id_cancion);
       setTurnos((prev) => prev.map((t) => (t.turno === actualizado.turno ? actualizado : t)));
