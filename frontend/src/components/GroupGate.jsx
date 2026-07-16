@@ -24,8 +24,13 @@ export default function GroupGate({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (grupo) return children;
-
+  // Si venimos de un link de invitación, hay que esperar a que termine el
+  // auto-join ANTES de decidir si mostrar la sala guardada: si el celular ya
+  // tenía otra sala vieja en localStorage, mostrarla de una (grupo truthy)
+  // dejaba montado todo el árbol (Karaoke.jsx incluido) con la sala vieja
+  // mientras el join a la sala nueva todavía estaba en vuelo — y como
+  // Karaoke.jsx carga la sesión activa una sola vez al montar, quedaba
+  // pegado mostrando la sesión pasada de la sala vieja para siempre.
   if (autoUniendo) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6">
@@ -33,6 +38,8 @@ export default function GroupGate({ children }) {
       </div>
     );
   }
+
+  if (grupo) return children;
 
   async function onCrear(e) {
     e.preventDefault();
