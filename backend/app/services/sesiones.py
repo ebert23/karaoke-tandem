@@ -184,7 +184,14 @@ def mover_en_cola(id_grupo: str, id_sesion: str, id_cancion: str, id_usuario_act
     return _turnos_to_out(filas_cola)
 
 
-def siguiente_cancion(id_grupo: str, id_sesion: str, id_usuario_actor: str) -> dict:
+def siguiente_cancion(id_grupo: str, id_sesion: str, id_usuario_actor: str, modo: str = "cola") -> dict:
+    """Arma el próximo turno.
+
+    modo="cola": saca la primera de la cola (y falla si está vacía).
+    modo="aleatorio": sortea del catálogo IGNORANDO la cola — lo que está
+    encolado queda reservado para cuando se vuelva al modo cola, así que
+    tampoco puede salir sorteado.
+    """
     _requiere_admin(id_grupo, id_usuario_actor)
     sesion_row = db.fetch_one("SELECT * FROM sesiones WHERE id_sesion = %s", (id_sesion,))
     if sesion_row is None or sesion_row["id_grupo"] != id_grupo:
@@ -210,11 +217,13 @@ def siguiente_cancion(id_grupo: str, id_sesion: str, id_usuario_actor: str) -> d
         raise ValueError("La sesión no tiene participantes")
     cantante = participantes[turno_actual % len(participantes)]
 
-    cola_row = db.fetch_one(
-        "SELECT * FROM canciones_sesion WHERE id_sesion = %s AND estado = 'En cola' ORDER BY orden ASC, id ASC LIMIT 1",
-        (id_sesion,),
-    )
-    if cola_row is not None:
+    if modo == "cola":
+        cola_row = db.fetch_one(
+            "SELECT * FROM canciones_sesion WHERE id_sesion = %s AND estado = 'En cola' ORDER BY orden ASC, id ASC LIMIT 1",
+            (id_sesion,),
+        )
+        if cola_row is None:
+            raise ValueError("La cola está vacía: agregá canciones o cambiá a modo aleatorio")
         nuevo_turno = len(turnos_previos) + 1
         # Si la fila ya trae cantante(s) elegidos a mano (dueto/grupal), se
         # respetan; si no, se asigna por rotación como siempre.
@@ -227,6 +236,8 @@ def siguiente_cancion(id_grupo: str, id_sesion: str, id_usuario_actor: str) -> d
         cola_row.update({"turno": nuevo_turno, "cantada_por": cantante_final, "estado": "Pendiente"})
         return _turno_to_out(cola_row)
 
+    # Modo aleatorio: 'En cola' sigue contando como usada, así lo que alguien
+    # dejó encolado no sale sorteado y queda esperando su turno en la cola.
     ids_usadas = {t["id_cancion"] for t in turnos_previos if t["estado"] in ("Pendiente", "Cantada", "En cola")}
     todas = canciones_svc.listar(id_grupo)
     disponibles = [c for c in todas if c["id"] not in ids_usadas]

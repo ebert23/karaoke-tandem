@@ -150,13 +150,15 @@ def main() -> None:
     r = client.post(f"/api/sesiones/{sid}/siguiente", headers=h(g1["id"]), json={"id_usuario_actor": luis["id"]})
     check(r.status_code == 403, "un no-admin no puede pedir la siguiente cancion (403)")
 
-    r = client.post(f"/api/sesiones/{sid}/siguiente", headers=h(g1["id"]), json={"id_usuario_actor": ana["id"]})
-    check(r.status_code == 200 and r.json()["id_cancion"] == c2["id"], "siguiente promueve la cola antes que el azar")
+    r = client.post(f"/api/sesiones/{sid}/siguiente", headers=h(g1["id"]),
+                    json={"id_usuario_actor": ana["id"], "modo": "cola"})
+    check(r.status_code == 200 and r.json()["id_cancion"] == c2["id"], "modo cola promueve la primera de la cola")
     turno1 = r.json()
     check(turno1["cancion"] is not None and turno1["cancion"]["id"] == c2["id"], "el turno trae su cancion embebida")
 
     # Anti-duplicados
-    r2 = client.post(f"/api/sesiones/{sid}/siguiente", headers=h(g1["id"]), json={"id_usuario_actor": ana["id"]})
+    r2 = client.post(f"/api/sesiones/{sid}/siguiente", headers=h(g1["id"]),
+                     json={"id_usuario_actor": ana["id"], "modo": "cola"})
     check(r2.json()["id_cancion"] == turno1["id_cancion"], "pedir siguiente con un pendiente ya armado devuelve el mismo turno")
 
     # Votacion en vivo
@@ -172,15 +174,32 @@ def main() -> None:
     check(r.json()["puntuacion"] == 9, "marcar cantada usa el promedio de la votacion en vivo")
     check(r.json()["cantada_por"].lower() == "ana", "primer turno le toca al primer participante")
 
-    # Siguiente al azar (sin cola)
-    r = client.post(f"/api/sesiones/{sid}/siguiente", headers=h(g1["id"]), json={"id_usuario_actor": ana["id"]})
-    check(r.status_code == 200, "siguiente sin cola cae a aleatorio")
+    # Modo aleatorio IGNORA la cola: encolamos una y pedimos aleatorio, y lo
+    # que sale tiene que ser otra cosa (la encolada queda esperando su turno).
+    encolada = nueva_cancion(g1["id"], "Encolada")
+    client.post(f"/api/sesiones/{sid}/cola", headers=h(g1["id"]),
+                json={"id_cancion": encolada["id"], "cantantes": []})
+    r = client.post(f"/api/sesiones/{sid}/siguiente", headers=h(g1["id"]),
+                    json={"id_usuario_actor": ana["id"], "modo": "aleatorio"})
+    check(r.status_code == 200, "modo aleatorio responde 200 aunque haya cola")
     az = r.json()
+    check(az["id_cancion"] != encolada["id"], "modo aleatorio NO promueve la cancion encolada")
     check(az["cancion"] is not None, "el turno aleatorio tambien trae su cancion")
+    sigue_en_cola = [t["id_cancion"] for t in client.get(f"/api/sesiones/{sid}/detalle", headers=h(g1["id"])).json()
+                     if t["estado"] == "En cola"]
+    check(encolada["id"] in sigue_en_cola, "la cancion encolada sigue en la cola tras el sorteo")
     r = client.post(f"/api/sesiones/{sid}/canciones/{az['id_cancion']}/cantada", headers=h(g1["id"]), json={"puntuacion": None})
     check(r.status_code == 400, "marcar cantada sin votos y sin puntuacion falla")
     r = client.post(f"/api/sesiones/{sid}/canciones/{az['id_cancion']}/cantada", headers=h(g1["id"]), json={"puntuacion": 7})
     check(r.json()["puntuacion"] == 7, "marcar cantada con puntuacion manual funciona")
+
+    # Vaciamos la cola (asi los bloques que siguen arrancan limpios) y de paso
+    # comprobamos que modo cola con la cola vacia avisa en vez de sortear.
+    delete(f"/api/sesiones/{sid}/cola/{encolada['id']}", headers=h(g1["id"]),
+           json={"id_usuario_actor": ana["id"]})
+    r = client.post(f"/api/sesiones/{sid}/siguiente", headers=h(g1["id"]),
+                    json={"id_usuario_actor": ana["id"], "modo": "cola"})
+    check(r.status_code == 400, "modo cola con la cola vacia falla (400), no sortea al azar")
 
     # detalle: valida el batch de canciones (cada turno con SU cancion correcta)
     det = client.get(f"/api/sesiones/{sid}/detalle", headers=h(g1["id"])).json()
@@ -201,7 +220,8 @@ def main() -> None:
     cd = nueva_cancion(g1["id"], "Dueto")
     client.post(f"/api/sesiones/{sid}/cola", headers=h(g1["id"]),
                 json={"id_cancion": cd["id"], "cantantes": ["Ana", "Luis"]})
-    r = client.post(f"/api/sesiones/{sid}/siguiente", headers=h(g1["id"]), json={"id_usuario_actor": ana["id"]})
+    r = client.post(f"/api/sesiones/{sid}/siguiente", headers=h(g1["id"]),
+                    json={"id_usuario_actor": ana["id"], "modo": "cola"})
     check(r.json()["id_cancion"] == cd["id"], "siguiente promueve el dueto")
     check("," in r.json()["cantada_por"], "el dueto conserva ambos cantantes")
     client.post(f"/api/sesiones/{sid}/canciones/{cd['id']}/cantada", headers=h(g1["id"]), json={"puntuacion": 8})

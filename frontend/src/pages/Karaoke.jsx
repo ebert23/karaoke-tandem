@@ -487,7 +487,7 @@ export default function Karaoke() {
     setPidiendo(true);
     try {
       await conAccionLocal(async () => {
-        const t = await api.siguienteCancion(sesion.id_sesion, usuario.id);
+        const t = await api.siguienteCancion(sesion.id_sesion, usuario.id, modo);
         // Comparamos por id_cancion (no por turno): una canción en cola tiene
         // turno=0 como placeholder hasta que "siguiente" la promueve y le
         // asigna el turno real, así que filtrar por turno dejaría la fila
@@ -634,10 +634,12 @@ export default function Karaoke() {
       ) : (
         <div className="card p-8 text-center">
           <p className="text-white/50 mb-4">
-            {cola.length > 0
-              ? `Sigue "${cola[0].cancion?.titulo}" (primera en la cola)`
-              : modo === "cola"
-              ? "La cola está vacía — agregá canciones para seguir"
+            {modo === "cola"
+              ? cola.length > 0
+                ? `Sigue "${cola[0].cancion?.titulo}" (primera en la cola)`
+                : "La cola está vacía — agregá canciones o cambiá a Aleatorio"
+              : cola.length > 0
+              ? "Modo aleatorio: se sortea del catálogo (la cola queda esperando)"
               : "Listo para el siguiente turno"}
           </p>
           {esAdmin ? (
@@ -646,7 +648,7 @@ export default function Karaoke() {
               className="btn-primary text-lg !px-8 !py-3"
               disabled={pidiendo || (modo === "cola" && cola.length === 0)}
             >
-              {pidiendo ? "Eligiendo…" : cola.length > 0 ? "▶ Siguiente de la cola" : "🎲 Siguiente canción"}
+              {pidiendo ? "Eligiendo…" : modo === "cola" ? "▶ Siguiente de la cola" : "🎲 Siguiente canción"}
             </button>
           ) : (
             <p className="text-white/30 text-sm">Esperando a que el admin elija la siguiente canción…</p>

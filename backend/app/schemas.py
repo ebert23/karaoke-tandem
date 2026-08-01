@@ -193,6 +193,12 @@ class ColaAccionRequest(BaseModel):
     id_usuario_actor: str
 
 
+class SiguienteRequest(ColaAccionRequest):
+    # "cola": promueve la primera de la cola. "aleatorio": sortea del
+    # catálogo ignorando la cola (lo encolado queda reservado).
+    modo: str = Field(default="cola", pattern="^(cola|aleatorio)$")
+
+
 class MoverColaRequest(ColaAccionRequest):
     direccion: str = Field(pattern="^(arriba|abajo)$")
 

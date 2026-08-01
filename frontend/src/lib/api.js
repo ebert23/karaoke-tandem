@@ -94,7 +94,8 @@ export const api = {
   quitarDeCola: (id, idCancion, idUsuarioActor) => del(`/sesiones/${id}/cola/${idCancion}`, { id_usuario_actor: idUsuarioActor }),
   moverEnCola: (id, idCancion, idUsuarioActor, direccion) =>
     post(`/sesiones/${id}/cola/${idCancion}/mover`, { id_usuario_actor: idUsuarioActor, direccion }),
-  siguienteCancion: (id, idUsuarioActor) => post(`/sesiones/${id}/siguiente`, { id_usuario_actor: idUsuarioActor }),
+  siguienteCancion: (id, idUsuarioActor, modo) =>
+    post(`/sesiones/${id}/siguiente`, { id_usuario_actor: idUsuarioActor, modo }),
   votarTurno: (id, idCancion, idUsuario, puntuacion) =>
     post(`/sesiones/${id}/canciones/${idCancion}/votar_turno`, { id_usuario: idUsuario, puntuacion }),
   votosTurno: (id, idCancion) => get(`/sesiones/${id}/canciones/${idCancion}/votos_turno`),

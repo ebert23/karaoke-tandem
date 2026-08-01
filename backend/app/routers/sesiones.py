@@ -11,6 +11,7 @@ from ..schemas import (
     SesionCreate,
     SesionOut,
     SesionUnirseRequest,
+    SiguienteRequest,
     VotarTurnoRequest,
     VotosTurnoOut,
 )
@@ -87,9 +88,9 @@ def mover_en_cola(id_sesion: str, id_cancion: str, data: MoverColaRequest, id_gr
 
 
 @router.post("/{id_sesion}/siguiente", response_model=CancionSesionOut)
-def siguiente(id_sesion: str, data: ColaAccionRequest, id_grupo: str = Depends(get_grupo_id)):
+def siguiente(id_sesion: str, data: SiguienteRequest, id_grupo: str = Depends(get_grupo_id)):
     try:
-        return svc.siguiente_cancion(id_grupo, id_sesion, data.id_usuario_actor)
+        return svc.siguiente_cancion(id_grupo, id_sesion, data.id_usuario_actor, data.modo)
     except PermissionError as e:
         raise HTTPException(403, str(e))
     except ValueError as e:
