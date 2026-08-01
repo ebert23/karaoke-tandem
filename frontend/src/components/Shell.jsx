@@ -77,6 +77,19 @@ export default function Shell() {
           <IconUsers />
           {grupo?.nombre || "Grupo"}
         </NavLink>
+        {/* Solo en el sidebar: la barra inferior del celular ya tiene 6 items
+            y un séptimo la deja ilegible. En móvil se llega desde /grupo. */}
+        <NavLink
+          to="/local"
+          className={({ isActive }) =>
+            `flex items-center gap-3 px-4 py-3 rounded-xl font-display font-semibold text-sm transition-colors ${
+              isActive ? "bg-gradient-to-r from-neon-purple/80 to-neon-pink/80 text-white shadow-neon-sm" : "text-white/60 hover:bg-white/5 hover:text-white"
+            }`
+          }
+        >
+          <span className="w-[18px] text-center">🏢</span>
+          {grupo?.modo === "salon" ? "Mesas" : "Modo salón"}
+        </NavLink>
         <div className="mt-auto pt-4 border-t border-white/10 flex items-center gap-3 px-1">
           <div className="w-9 h-9 rounded-full bg-gradient-to-br from-neon-purple to-neon-pink flex items-center justify-center font-display font-bold text-sm shrink-0">
             {usuario?.nombre?.[0]?.toUpperCase()}

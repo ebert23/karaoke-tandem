@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { IconCopy, IconCrown, IconUsers, IconWhatsapp } from "../components/Icons.jsx";
 import { useGroup } from "../lib/GroupContext.jsx";
 import { useIdentity } from "../lib/IdentityContext.jsx";
@@ -152,6 +153,24 @@ export default function Grupo() {
           </button>
         </div>
       </div>
+
+      {/* Entrada al modo salón. Está acá y no en la barra inferior porque en
+          el celular esa barra ya está llena; en desktop también está en el
+          sidebar. */}
+      <Link to="/local" className="card p-4 flex items-center gap-3 hover:bg-white/5 transition-colors">
+        <span className="text-2xl">🏢</span>
+        <div className="min-w-0 flex-1">
+          <p className="font-display font-semibold text-sm">
+            {grupo.modo === "salon" ? "Mesas del local" : "¿Es un karaoke con salón?"}
+          </p>
+          <p className="text-white/40 text-xs">
+            {grupo.modo === "salon"
+              ? "Administrá las mesas, sus QR y el acceso del DJ"
+              : "Activá el modo salón: QR por mesa, rotación y consola de DJ"}
+          </p>
+        </div>
+        <span className="text-white/30">›</span>
+      </Link>
 
       {detalle && detalle.admins.length === 0 && (
         <div className="card p-4 border-amber-400/30 bg-amber-400/5 flex items-center justify-between gap-3 flex-wrap">

@@ -59,6 +59,8 @@ def limpiar() -> None:
         for sql in (
             "DELETE FROM votos_turno WHERE id_sesion IN (SELECT id_sesion FROM sesiones WHERE id_grupo = %s)",
             "DELETE FROM canciones_sesion WHERE id_sesion IN (SELECT id_sesion FROM sesiones WHERE id_grupo = %s)",
+            "DELETE FROM sugerencias_mesa WHERE id_grupo = %s",
+            "DELETE FROM mesas WHERE id_grupo = %s",
             "DELETE FROM votos WHERE id_grupo = %s",
             "DELETE FROM favoritos WHERE id_grupo = %s",
             "DELETE FROM sesiones WHERE id_grupo = %s",
@@ -305,7 +307,206 @@ def main() -> None:
     check(client.get("/api/youtube/buscar", params={"q": "test"}).status_code in (200, 501),
           "youtube buscar responde (200 con API key, 501 sin ella)")
 
+    salon()
+
     print(f"\nTODOS LOS CHECKS PASARON ({_checks})")
+
+
+def salon() -> None:
+    """Modo salón: mesas con QR, rotación entre mesas y vista del DJ.
+
+    Lo que más importa acá es el ORDEN exacto de la rotación: es la promesa
+    del producto ("todas las mesas cantan, las grandes un poco más") y lo
+    único que un local va a mirar con lupa la primera noche.
+    """
+    print("\n--- modo salon ---")
+    local = crear_grupo("Karaoke Test Salon", "Duena")
+    gid = local["id"]
+    duena_id = local["admins"][0]
+
+    # El código de DJ solo viaja en esta respuesta (y al regenerarlo).
+    check(client.post(f"/api/grupos/{gid}/convertir-a-salon",
+                      json={"id_usuario_actor": "U-cualquiera"}).status_code == 403,
+          "solo un admin puede convertir el grupo en local (403)")
+    r = client.post(f"/api/grupos/{gid}/convertir-a-salon", json={"id_usuario_actor": duena_id})
+    check(r.status_code == 200 and r.json()["modo"] == "salon", "grupo convertido a modo salon")
+    codigo_dj = r.json()["codigo_dj"]
+    check(len(codigo_dj) >= 20, f"codigo de DJ largo y no adivinable ({len(codigo_dj)} chars)")
+    hdj = {"X-Grupo-Id": gid, "X-DJ-Codigo": codigo_dj}
+
+    # ---------------- Puerta del DJ ----------------
+    check(client.get("/api/dj/cola", headers=h(gid)).status_code == 403,
+          "sin codigo de DJ la vista del DJ responde 403")
+    check(client.get("/api/dj/cola", headers={**h(gid), "X-DJ-Codigo": "otracosa"}).status_code == 403,
+          "con codigo de DJ equivocado responde 403")
+
+    # ---------------- Catálogo + noche + mesas ----------------
+    canciones = {t: nueva_cancion(gid, t, "Duena")["id"] for t in ["A", "B", "C", "D", "E", "F", "G", "H", "I"]}
+    sid = client.post("/api/sesiones", json={"participantes": ["Salon"]}, headers=h(gid)).json()["id_sesion"]
+
+    def crear_mesa(numero, tamano):
+        r = client.post("/api/mesas", json={"numero": numero, "tamano": tamano}, headers=h(gid))
+        assert r.status_code == 200, r.text
+        return r.json()
+
+    m1 = crear_mesa("1", 3)   # mesa grande -> cupo 2
+    m2 = crear_mesa("2", 1)   # mesa de una persona -> cupo 1
+    m3 = crear_mesa("3", 4)   # mesa grande -> cupo 2
+    check(m1["cupo_por_ronda"] == 2 and m2["cupo_por_ronda"] == 1,
+          "cupo por ronda derivado del tamano (1 persona -> 1, 2+ -> 2)")
+    check(len(m1["codigo"]) == 8 and m1["codigo"] != m2["codigo"], "cada mesa tiene su propio codigo de QR")
+    check(client.post("/api/mesas", json={"numero": "1", "tamano": 2}, headers=h(gid)).status_code == 400,
+          "no se puede repetir el numero de mesa en el mismo local")
+
+    # Pedir con la mesa cerrada no debe funcionar: el QR existe desde que se
+    # imprime, pero recién sirve cuando el local sienta gente ahí.
+    check(client.post(f"/api/mesa/{m1['codigo']}/pedidos",
+                      json={"id_cancion": canciones["A"], "pedido_por": "Juan"}).status_code == 400,
+          "con la mesa cerrada no se puede pedir")
+
+    for m, tam in ((m1, 3), (m2, 1), (m3, 4)):
+        r = client.post(f"/api/mesas/{m['id']}/abrir", json={"tamano": tam}, headers=h(gid))
+        assert r.status_code == 200, r.text
+
+    # ---------------- La rotación ----------------
+    def pedir(mesa, titulo, quien):
+        r = client.post(f"/api/mesa/{mesa['codigo']}/pedidos",
+                        json={"id_cancion": canciones[titulo], "pedido_por": quien})
+        assert r.status_code == 200, r.text
+        return r.json()
+
+    pedir(m1, "A", "Juan")
+    pedir(m1, "B", "Juan")
+    pedir(m1, "C", "Juan")   # llenó su cupo de la ronda 0 -> esta va a la 1
+    pedir(m2, "D", "Sole")
+    pedir(m2, "E", "Sole")   # cupo 1 -> esta va a la ronda 1
+    pedir(m3, "F", "Pepe")
+    pedir(m3, "G", "Pepe")
+
+    def titulos_en_cola():
+        r = client.get("/api/dj/cola", headers=hdj)
+        assert r.status_code == 200, r.text
+        return r.json(), [p["cancion"]["titulo"] for p in r.json()["cola"]]
+
+    cola, titulos = titulos_en_cola()
+    # Mesa 1 mete sus dos, después mesa 2 la suya, después mesa 3 sus dos —
+    # y recién entonces arranca la segunda vuelta. Nadie espera una vuelta
+    # entera para cantar por primera vez.
+    check(titulos == ["A", "B", "D", "F", "G", "C", "E"],
+          f"rotacion intercalada con cupo por mesa: {titulos}")
+    check(cola["mesas_abiertas"] == 3, "el DJ ve 3 mesas abiertas")
+
+    # ---------------- Mesa que llega tarde ----------------
+    r = client.post("/api/dj/siguiente", headers=hdj)
+    check(r.status_code == 200 and r.json()["cancion"]["titulo"] == "A", "el DJ promueve la primera de la rotacion")
+    check(r.json()["mesa_numero"] == "1" and r.json()["pedido_por"] == "Juan",
+          "el pedido trae mesa y nombre (lo que el DJ anuncia al microfono)")
+    primera = r.json()
+    check(client.post("/api/dj/pedidos/{}/cantada".format(primera["id"]), headers=hdj).status_code == 200,
+          "el DJ marca la cancion como cantada")
+
+    m4 = crear_mesa("4", 2)
+    client.post(f"/api/mesas/{m4['id']}/abrir", json={"tamano": 2}, headers=h(gid))
+    pedir(m4, "H", "Tarde")
+    _, titulos = titulos_en_cola()
+    check(titulos == ["B", "D", "F", "G", "H", "C", "E"],
+          f"la mesa que llega tarde entra en la vuelta en curso, no al principio ni al final: {titulos}")
+
+    # ---------------- No vino ----------------
+    r = client.post("/api/dj/siguiente", headers=hdj)
+    pedido_b = r.json()
+    check(pedido_b["cancion"]["titulo"] == "B", "sigue B")
+    r = client.post(f"/api/dj/pedidos/{pedido_b['id']}/no-vino", headers=hdj)
+    check(r.status_code == 200, "el DJ marca 'no vino'")
+    _, titulos = titulos_en_cola()
+    check(titulos[0] == "D" and "B" in titulos,
+          f"'no vino' atrasa el pedido pero no lo borra: {titulos}")
+    # Pierde su lugar en la vuelta en curso (queda detrás de todo lo que
+    # todavía esperaba en ella) pero vuelve al principio de la siguiente: si
+    # lo mandáramos al fondo de la cola, el que fue al baño no canta más.
+    check(titulos.index("B") > titulos.index("H"),
+          f"el que no vino queda detras de toda la vuelta en curso: {titulos}")
+
+    # ---------------- Repetida ----------------
+    # "A" ya se cantó. Otra mesa la puede volver a pedir (en un salón con
+    # doscientas personas, bloquearla toda la noche sería absurdo), pero el
+    # DJ la ve marcada.
+    r = client.post(f"/api/mesa/{m3['codigo']}/pedidos",
+                    json={"id_cancion": canciones["A"], "pedido_por": "Pepe"})
+    check(r.status_code == 200, "otra mesa puede pedir una cancion que ya se canto esta noche")
+    cola, _ = titulos_en_cola()
+    repetida = next((p for p in cola["cola"] if p["cancion"]["titulo"] == "A"), None)
+    check(repetida is not None and repetida["repetida"] is True,
+          "el DJ ve el aviso de repetida")
+    check(repetida["cantada_hace_min"] is not None, "y hace cuanto se canto")
+
+    # La misma mesa sí tiene bloqueado el duplicado, que es un error de dedo.
+    check(client.post(f"/api/mesa/{m3['codigo']}/pedidos",
+                      json={"id_cancion": canciones["A"], "pedido_por": "Pepe"}).status_code == 400,
+          "la misma mesa no puede pedir dos veces la misma cancion")
+
+    # ---------------- Override del DJ ----------------
+    cola, titulos = titulos_en_cola()
+    ultimo = cola["cola"][-1]
+    r = client.post(f"/api/dj/pedidos/{ultimo['id']}/subir", headers=hdj)
+    check(r.status_code == 200, "el DJ sube un pedido al frente")
+    _, titulos = titulos_en_cola()
+    check(titulos[0] == ultimo["cancion"]["titulo"],
+          f"el override del DJ manda sobre la rotacion: {titulos}")
+
+    # ---------------- Vista del cliente ----------------
+    r = client.get(f"/api/mesa/{m2['codigo']}")
+    check(r.status_code == 200, "el cliente ve el estado de su mesa con solo el codigo del QR")
+    estado = r.json()
+    check(estado["abierta"] is True and estado["mesa"]["numero"] == "2", "sabe que su mesa esta abierta")
+    check(len(estado["mis_pedidos"]) > 0, "ve sus propios pedidos")
+    check(all(p["posicion"] is not None and p["espera_min"] is not None for p in estado["mis_pedidos"]),
+          "cada pedido trae su posicion en la cola y la espera estimada")
+    check(estado["mis_pedidos"][0]["espera_min"] >= 0, "la espera estimada es un numero de minutos")
+    # No le filtramos los pedidos de las otras mesas.
+    check(all(p["id_mesa"] == m2["id"] for p in estado["mis_pedidos"]), "solo ve los pedidos de su mesa")
+
+    # Cancelar lo propio sí; lo de otra mesa no.
+    mio = estado["mis_pedidos"][0]
+    check(delete(f"/api/mesa/{m1['codigo']}/pedidos/{mio['id']}").status_code == 403,
+          "una mesa no puede cancelar el pedido de otra (403)")
+    check(delete(f"/api/mesa/{m2['codigo']}/pedidos/{mio['id']}").status_code == 204,
+          "una mesa puede cancelar su propio pedido")
+
+    # ---------------- Catálogo cerrado + sugerencias ----------------
+    cat = client.get(f"/api/mesa/{m1['codigo']}/catalogo").json()
+    check(len(cat) == len(canciones), "el cliente ve el catalogo del local")
+    check(client.post(f"/api/mesa/{m1['codigo']}/pedidos",
+                      json={"id_cancion": "C-inexistente", "pedido_por": "Juan"}).status_code == 400,
+          "no se puede pedir algo que no esta en el catalogo del local")
+    r = client.post(f"/api/mesa/{m1['codigo']}/sugerencias",
+                    json={"titulo": "Una que no tienen", "artista": "Alguien", "pedido_por": "Juan"})
+    check(r.status_code == 200, "el cliente puede sugerir una cancion que el local no tiene")
+    sug = client.get("/api/dj/sugerencias", headers=hdj).json()
+    check(len(sug) == 1 and sug[0]["mesa_numero"] == "1", "la sugerencia le llega al DJ con el numero de mesa")
+    _, titulos = titulos_en_cola()
+    check("Una que no tienen" not in titulos, "la sugerencia NO entra a la rotacion")
+
+    # ---------------- Mesa que se va ----------------
+    cola, _ = titulos_en_cola()
+    pedidos_m3 = [p for p in cola["cola"] if p["id_mesa"] == m3["id"]]
+    check(len(pedidos_m3) > 0, "la mesa 3 todavia tiene pedidos esperando")
+    r = client.post(f"/api/mesas/{m3['id']}/cerrar", headers=h(gid))
+    check(r.status_code == 200 and r.json()["pedidos_cancelados"] == len(pedidos_m3),
+          f"cerrar la mesa cancela sus {len(pedidos_m3)} pedidos pendientes")
+    _, titulos = titulos_en_cola()
+    cola, _ = titulos_en_cola()
+    check(all(p["id_mesa"] != m3["id"] for p in cola["cola"]),
+          "el DJ ya no ve pedidos de la mesa que se fue")
+    check(client.post(f"/api/mesa/{m3['codigo']}/pedidos",
+                      json={"id_cancion": canciones["I"], "pedido_por": "Pepe"}).status_code == 400,
+          "una mesa cerrada ya no puede pedir")
+
+    # ---------------- El modo grupo sigue intacto ----------------
+    g = crear_grupo("Grupo Normal Test", "Ana")
+    check(g["modo"] == "grupo", "un grupo creado sin modo sigue siendo 'grupo'")
+    check(client.get("/api/dj/cola", headers={**h(g["id"]), "X-DJ-Codigo": "x"}).status_code == 400,
+          "un grupo normal no tiene vista de DJ (400)")
 
 
 if __name__ == "__main__":

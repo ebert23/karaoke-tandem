@@ -1,5 +1,5 @@
 // Cliente HTTP minimalista para la API de KaraokeTandem.
-import { GRUPO_STORAGE_KEY } from "./storageKeys.js";
+import { DJ_STORAGE_KEY, GRUPO_STORAGE_KEY } from "./storageKeys.js";
 
 const BASE = "/api";
 
@@ -12,14 +12,35 @@ function idGrupoActual() {
   }
 }
 
+// Sesión del DJ: {id_grupo, nombre, codigo}. Vive aparte de la del grupo
+// porque el DJ entra por su propio código y su celular no tiene por qué
+// estar unido a ninguna sala.
+export function sesionDj() {
+  try {
+    return JSON.parse(localStorage.getItem(DJ_STORAGE_KEY) || "null");
+  } catch {
+    return null;
+  }
+}
+
+export function guardarSesionDj(datos) {
+  if (datos) localStorage.setItem(DJ_STORAGE_KEY, JSON.stringify(datos));
+  else localStorage.removeItem(DJ_STORAGE_KEY);
+}
+
 async function request(path, options = {}) {
-  const idGrupo = idGrupoActual();
+  const { dj, ...opts } = options;
+  // Las rutas del DJ mandan su propio grupo y su código: no dependen de que
+  // el celular tenga una sala guardada.
+  const sesion = dj ? sesionDj() : null;
+  const idGrupo = dj ? sesion?.id_grupo : idGrupoActual();
   const res = await fetch(`${BASE}${path}`, {
     headers: {
       "Content-Type": "application/json",
       ...(idGrupo ? { "X-Grupo-Id": idGrupo } : {}),
+      ...(dj && sesion?.codigo ? { "X-DJ-Codigo": sesion.codigo } : {}),
     },
-    ...options,
+    ...opts,
   });
   if (!res.ok) {
     let detail = res.statusText;
@@ -49,6 +70,11 @@ const get = (path) => request(path);
 const post = (path, body) => request(path, { method: "POST", body: JSON.stringify(body ?? {}) });
 const put = (path, body) => request(path, { method: "PUT", body: JSON.stringify(body ?? {}) });
 const del = (path, body) => request(path, { method: "DELETE", body: JSON.stringify(body ?? {}) });
+
+// Variantes que adjuntan las credenciales del DJ (X-Grupo-Id + X-DJ-Codigo).
+const getDj = (path) => request(path, { dj: true });
+const postDj = (path, body) => request(path, { method: "POST", body: JSON.stringify(body ?? {}), dj: true });
+const delDj = (path) => request(path, { method: "DELETE", dj: true });
 
 function qs(params = {}) {
   const s = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== ""));
@@ -113,4 +139,37 @@ export const api = {
   rankingNoche: (idSesion) => get(`/ranking/noche/${idSesion}`),
   rankingHistorico: () => get("/ranking/historico"),
   estadisticas: (idUsuario) => get(`/estadisticas/${idUsuario}`),
+
+  // --- Modo salón ---
+  // Panel del dueño (usa el X-Grupo-Id normal).
+  convertirASalon: (idGrupo, idUsuarioActor) =>
+    post(`/grupos/${idGrupo}/convertir-a-salon`, { id_usuario_actor: idUsuarioActor }),
+  regenerarCodigoDj: (idGrupo, idUsuarioActor) =>
+    post(`/grupos/${idGrupo}/codigo-dj`, { id_usuario_actor: idUsuarioActor }),
+  mesas: () => get("/mesas"),
+  crearMesa: (numero, tamano) => post("/mesas", { numero, tamano }),
+  abrirMesa: (idMesa, tamano) => post(`/mesas/${idMesa}/abrir`, { tamano }),
+  cerrarMesa: (idMesa) => post(`/mesas/${idMesa}/cerrar`),
+  eliminarMesa: (idMesa, idUsuarioActor) => del(`/mesas/${idMesa}`, { id_usuario_actor: idUsuarioActor }),
+  pantallaSalon: () => get("/salon/pantalla"),
+
+  // Cliente en la mesa: solo con el código del QR, sin X-Grupo-Id.
+  estadoMesa: (codigo) => get(`/mesa/${codigo}`),
+  catalogoMesa: (codigo, params = {}) => get(`/mesa/${codigo}/catalogo${qs(params)}`),
+  pedirCancion: (codigo, idCancion, pedidoPor) =>
+    post(`/mesa/${codigo}/pedidos`, { id_cancion: idCancion, pedido_por: pedidoPor }),
+  cancelarPedido: (codigo, idPedido) => del(`/mesa/${codigo}/pedidos/${idPedido}`),
+  sugerirCancion: (codigo, titulo, artista, pedidoPor) =>
+    post(`/mesa/${codigo}/sugerencias`, { titulo, artista, pedido_por: pedidoPor }),
+
+  // Vista del DJ.
+  djEntrar: (codigo) => post("/dj/entrar", { codigo }),
+  djCola: () => getDj("/dj/cola"),
+  djSiguiente: () => postDj("/dj/siguiente"),
+  djCantada: (idPedido) => postDj(`/dj/pedidos/${idPedido}/cantada`),
+  djNoVino: (idPedido) => postDj(`/dj/pedidos/${idPedido}/no-vino`),
+  djSubir: (idPedido) => postDj(`/dj/pedidos/${idPedido}/subir`),
+  djCancelar: (idPedido) => delDj(`/dj/pedidos/${idPedido}`),
+  djSugerencias: () => getDj("/dj/sugerencias"),
+  djMesas: () => getDj("/dj/mesas"),
 };

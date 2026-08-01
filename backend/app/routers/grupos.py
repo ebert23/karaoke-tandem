@@ -2,6 +2,7 @@
 from fastapi import APIRouter, HTTPException
 
 from ..schemas import (
+    GrupoConDjOut,
     GrupoCreate,
     GrupoDetalleOut,
     GrupoOut,
@@ -18,7 +19,10 @@ router = APIRouter(prefix="/api/grupos", tags=["grupos"])
 
 @router.post("", response_model=GrupoOut)
 def crear(data: GrupoCreate):
-    return svc.crear(data.nombre, data.foto, data.creado_por_nombre)
+    try:
+        return svc.crear(data.nombre, data.foto, data.creado_por_nombre, data.modo)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @router.post("/unirse", response_model=GrupoOut)
@@ -42,6 +46,28 @@ def obtener(id_grupo: str):
 def reclamar_admin(id_grupo: str, data: ReclamarAdminRequest):
     try:
         return svc.reclamar_admin(id_grupo, data.id_usuario)
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
+@router.post("/{id_grupo}/convertir-a-salon", response_model=GrupoConDjOut)
+def convertir_a_salon(id_grupo: str, data: MiembroAccionRequest):
+    """Pasa el grupo a modo salón (local de karaoke) y devuelve el código del
+    DJ. Es la única respuesta donde viaja ese código además de regenerarlo."""
+    try:
+        return svc.convertir_a_salon(id_grupo, data.id_usuario_actor)
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
+@router.post("/{id_grupo}/codigo-dj", response_model=GrupoConDjOut)
+def regenerar_codigo_dj(id_grupo: str, data: MiembroAccionRequest):
+    try:
+        return svc.regenerar_codigo_dj(id_grupo, data.id_usuario_actor)
     except PermissionError as e:
         raise HTTPException(403, str(e))
     except ValueError as e:

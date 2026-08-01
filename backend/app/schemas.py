@@ -7,6 +7,10 @@ class GrupoCreate(BaseModel):
     nombre: str = Field(min_length=1, max_length=80)
     foto: str = ""
     creado_por_nombre: str = Field(min_length=1, max_length=80)
+    # "salon" crea directamente un local de karaoke (mesas + DJ) en vez de una
+    # sala de amigos. Los clientes viejos no mandan el campo y siguen creando
+    # grupos normales.
+    modo: str = Field(default="grupo", pattern="^(grupo|salon)$")
 
 
 class GrupoUnirseRequest(BaseModel):
@@ -20,6 +24,13 @@ class GrupoOut(BaseModel):
     foto: str
     admins: list[str]
     fecha_creacion: str
+    modo: str = "grupo"
+
+
+class GrupoConDjOut(GrupoOut):
+    # Solo se devuelve al admin que lo pide explícitamente (convertir a salón
+    # o regenerar); nunca en el detalle normal del grupo.
+    codigo_dj: str = ""
 
 
 class GrupoDetalleOut(GrupoOut):
@@ -220,6 +231,104 @@ class VotoTurnoOut(BaseModel):
 class VotosTurnoOut(BaseModel):
     votos: list[VotoTurnoOut]
     promedio: float | None
+
+
+# --- Modo salón: mesas, pedidos, vista del DJ ---
+class DjEntrarRequest(BaseModel):
+    codigo: str = Field(min_length=8, max_length=120)
+
+
+class MesaCreate(BaseModel):
+    numero: str = Field(min_length=1, max_length=40)
+    tamano: int = Field(default=2, ge=1, le=30)
+
+
+class MesaAbrirRequest(BaseModel):
+    # Cuánta gente se sentó. Define el cupo por ronda (1 persona -> 1 canción
+    # por vuelta, 2+ -> 2). Es autodeclarado y el local lo puede corregir.
+    tamano: int = Field(default=2, ge=1, le=30)
+
+
+class MesaOut(BaseModel):
+    id: str
+    numero: str
+    codigo: str
+    tamano: int
+    cupo_por_ronda: int
+    estado: str
+    id_sesion: str | None = None
+    fecha_apertura: str = ""
+    pedidos_cancelados: int | None = None
+
+
+class PedidoCreate(BaseModel):
+    id_cancion: str
+    # Nombre libre de quien va a cantar. No es un usuario del grupo: en el
+    # salón el público rota toda la noche.
+    pedido_por: str = Field(default="", max_length=80)
+
+
+class SugerenciaCreate(BaseModel):
+    titulo: str = Field(min_length=1, max_length=200)
+    artista: str = Field(default="", max_length=200)
+    pedido_por: str = Field(default="", max_length=80)
+
+
+class PedidoOut(BaseModel):
+    id: int
+    id_cancion: str
+    cancion: CancionOut | None = None
+    estado: str
+    ronda: int
+    turno: int
+    pedido_por: str
+    fecha_pedido: str = ""
+    fecha_cantada: str = ""
+    id_mesa: str | None = None
+    mesa_numero: str = ""
+    # Solo vienen en la vista del DJ.
+    repetida: bool | None = None
+    cantada_hace_min: int | None = None
+    # Solo vienen en la vista del cliente.
+    posicion: int | None = None
+    espera_min: int | None = None
+    es_mi_mesa: bool | None = None
+
+
+class ColaSalonOut(BaseModel):
+    id_sesion: str
+    ahora: PedidoOut | None = None
+    cola: list[PedidoOut] = []
+    cantadas: list[PedidoOut] = []
+    total_cantadas: int = 0
+    ronda_actual: int = 0
+    mesas_abiertas: int = 0
+
+
+class MesaResumenOut(BaseModel):
+    id: str
+    numero: str
+    estado: str
+    tamano: int | None = None
+    cupo_por_ronda: int | None = None
+
+
+class EstadoMesaOut(BaseModel):
+    mesa: MesaResumenOut
+    abierta: bool
+    ahora: PedidoOut | None = None
+    mis_pedidos: list[PedidoOut] = []
+    total_en_cola: int = 0
+    max_pedidos: int | None = None
+
+
+class SugerenciaMesaOut(BaseModel):
+    id: int
+    titulo: str
+    artista: str
+    pedido_por: str
+    mesa_numero: str
+    fecha: str
 
 
 GrupoDetalleOut.model_rebuild()

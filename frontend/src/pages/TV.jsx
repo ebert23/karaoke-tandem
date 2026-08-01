@@ -33,7 +33,80 @@ function QrInvitacion({ grupo, className }) {
   return <img src={dataUrl} alt="Código QR para unirte" className={className} />;
 }
 
+// Pantalla del salón principal: no reproduce video (la música la pone el DJ
+// en su equipo), solo dice quién canta ahora y quién sigue. Es lo que hace
+// que el sistema se explique solo, sin que el mozo lo enseñe mesa por mesa.
+function TVSalon({ grupo }) {
+  const [datos, setDatos] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    async function cargar() {
+      try {
+        setDatos(await api.pantallaSalon());
+        setError("");
+      } catch (e) {
+        setError(e.message);
+      }
+    }
+    cargar();
+    const id = setInterval(cargar, 8000);
+    return () => clearInterval(id);
+  }, []);
+
+  const ahora = datos?.ahora;
+  const cola = datos?.cola || [];
+
+  return (
+    <div className="min-h-screen flex flex-col p-8 gap-6">
+      <div className="flex-1 flex flex-col items-center justify-center text-center gap-4">
+        {ahora ? (
+          <>
+            <p className="text-neon-pinklight uppercase tracking-[0.3em] text-xl">Canta ahora</p>
+            <h1 className="font-display font-extrabold text-[12vw] leading-none title-glow">
+              Mesa {ahora.mesa_numero}
+            </h1>
+            <p className="font-display font-bold text-6xl text-white">{ahora.pedido_por}</p>
+            <p className="text-3xl text-white/60 mt-2">
+              {ahora.cancion?.titulo} <span className="text-white/35">— {ahora.cancion?.artista}</span>
+            </p>
+          </>
+        ) : (
+          <>
+            <h1 className="title-glow text-6xl">{grupo.nombre}</h1>
+            <p className="text-white/50 text-3xl mt-4">
+              {error || "Escaneá el QR de tu mesa y pedí tu canción 🎤"}
+            </p>
+          </>
+        )}
+      </div>
+
+      {cola.length > 0 && (
+        <div className="border-t border-white/10 pt-5">
+          <p className="text-white/40 uppercase tracking-[0.3em] text-sm mb-3">Siguen</p>
+          <div className="flex gap-4 overflow-x-auto">
+            {cola.map((p, i) => (
+              <div key={p.id} className="chip !text-2xl !px-5 !py-2 shrink-0">
+                <span className="text-white/40">{i + 1}.</span> Mesa {p.mesa_numero}
+                <span className="text-neon-pinklight"> · {p.pedido_por}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Se elige el componente acá arriba y no con un early return adentro de
+// TVGrupo: así el modo salón no monta los efectos del modo grupo (que
+// sondean la sesión y montan el reproductor de YouTube).
 export default function TV() {
+  const { grupo } = useGroup();
+  return grupo?.modo === "salon" ? <TVSalon grupo={grupo} /> : <TVGrupo />;
+}
+
+function TVGrupo() {
   const { grupo } = useGroup();
   const { push } = useToast();
   const [sesion, setSesion] = useState(undefined); // undefined = cargando, null = sin sesión
