@@ -86,7 +86,7 @@ def quitar_participante(id_grupo: str, id_sesion: str, nombre: str) -> None:
         db.execute("UPDATE sesiones SET participantes = %s WHERE id_sesion = %s", (nuevos, id_sesion))
 
 
-def _turno_to_out(row: dict, incluir_cancion: bool = True) -> dict:
+def _turno_dict(row: dict, cancion: dict | None) -> dict:
     return {
         "id_sesion": row["id_sesion"],
         "id_cancion": row["id_cancion"],
@@ -94,8 +94,19 @@ def _turno_to_out(row: dict, incluir_cancion: bool = True) -> dict:
         "cantada_por": row["cantada_por"],
         "puntuacion": row["puntuacion"],
         "estado": row["estado"],
-        "cancion": canciones_svc.get_por_id(row["id_cancion"]) if incluir_cancion else None,
+        "cancion": cancion,
     }
+
+
+def _turno_to_out(row: dict, incluir_cancion: bool = True) -> dict:
+    return _turno_dict(row, canciones_svc.get_por_id(row["id_cancion"]) if incluir_cancion else None)
+
+
+def _turnos_to_out(rows: list[dict]) -> list[dict]:
+    """Igual que _turno_to_out pero para una lista: resuelve todas las
+    canciones de una sola consulta en vez de una por turno."""
+    canciones = canciones_svc.get_varias_por_id([r["id_cancion"] for r in rows])
+    return [_turno_dict(r, canciones.get(r["id_cancion"])) for r in rows]
 
 
 def agregar_a_cola(id_grupo: str, id_sesion: str, id_cancion: str, cantantes: list[str] | None = None) -> dict:
@@ -170,7 +181,7 @@ def mover_en_cola(id_grupo: str, id_sesion: str, id_cancion: str, id_usuario_act
     fila_a["orden"], fila_b["orden"] = fila_b["orden"], fila_a["orden"]
 
     filas_cola.sort(key=lambda r: (r["orden"], r["id"]))
-    return [_turno_to_out(r) for r in filas_cola]
+    return _turnos_to_out(filas_cola)
 
 
 def siguiente_cancion(id_grupo: str, id_sesion: str, id_usuario_actor: str) -> dict:
@@ -341,4 +352,4 @@ def detalle(id_grupo: str, id_sesion: str) -> list[dict]:
         "ORDER BY turno ASC, orden ASC, id ASC",
         (id_sesion, id_grupo),
     )
-    return [_turno_to_out(r) for r in rows]
+    return _turnos_to_out(rows)

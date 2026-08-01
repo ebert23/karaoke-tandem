@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from . import db
 from .config import settings
 from .routers import canciones, grupos, health, ranking, retos, sesiones, stats, usuarios, youtube
 
@@ -41,6 +42,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def una_conexion_por_request(request: Request, call_next):
+    """Todas las consultas de un mismo request comparten una conexión.
+
+    La conexión se abre recién en la primera consulta, así que los requests
+    que no tocan la base (frontend estático, health) no abren ninguna.
+    """
+    with db.request_scope():
+        return await call_next(request)
 
 
 @app.exception_handler(Exception)

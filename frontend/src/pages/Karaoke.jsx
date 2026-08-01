@@ -285,8 +285,20 @@ export default function Karaoke() {
   const versionRef = useRef(0);
   const esAdmin = grupo.admins?.includes(usuario.id) ?? false;
 
-  function marcarAccionLocal() {
+  // Envuelve una acción que modifica los turnos, marcando la versión al
+  // empezar Y al terminar. Las dos marcas son necesarias: con una sola, un
+  // sondeo que arrancaba mientras la acción estaba en vuelo leía la misma
+  // versión antes y después, no se descartaba, y pisaba el turno recién
+  // promovido con datos viejos — de ahí que la canción apareciera y se
+  // esfumara un segundo después, o que "marcar cantada" mostrara de nuevo
+  // la canción que se acababa de cerrar.
+  async function conAccionLocal(fn) {
     versionRef.current += 1;
+    try {
+      return await fn();
+    } finally {
+      versionRef.current += 1;
+    }
   }
 
   // Si alguien abrió la puntuación manual (porque todavía nadie había
@@ -422,11 +434,12 @@ export default function Karaoke() {
   const disponiblesParaCola = canciones.filter((c) => !idsUsadas.has(c.id));
 
   async function agregarACola(idCancion, cantantes = []) {
-    marcarAccionLocal();
     try {
-      const t = await api.agregarACola(sesion.id_sesion, idCancion, cantantes);
-      setTurnos((prev) => [...prev, t]);
-      push(cantantes.length >= 2 ? "¡Dueto agregado a la cola! 🎤🎤" : "Agregada a la cola 🎶", "success");
+      await conAccionLocal(async () => {
+        const t = await api.agregarACola(sesion.id_sesion, idCancion, cantantes);
+        setTurnos((prev) => [...prev, t]);
+        push(cantantes.length >= 2 ? "¡Dueto agregado a la cola! 🎤🎤" : "Agregada a la cola 🎶", "success");
+      });
     } catch (e) {
       push(e.message, "error");
     } finally {
@@ -437,10 +450,11 @@ export default function Karaoke() {
 
   async function moverEnCola(idCancion, direccion) {
     setMoviendoCola(idCancion);
-    marcarAccionLocal();
     try {
-      const nuevaCola = await api.moverEnCola(sesion.id_sesion, idCancion, usuario.id, direccion);
-      setTurnos((prev) => [...prev.filter((t) => t.estado !== "En cola"), ...nuevaCola]);
+      await conAccionLocal(async () => {
+        const nuevaCola = await api.moverEnCola(sesion.id_sesion, idCancion, usuario.id, direccion);
+        setTurnos((prev) => [...prev.filter((t) => t.estado !== "En cola"), ...nuevaCola]);
+      });
     } catch (e) {
       push(e.message, "error");
     } finally {
@@ -449,11 +463,12 @@ export default function Karaoke() {
   }
 
   async function quitarDeCola(idCancion) {
-    marcarAccionLocal();
     try {
-      await api.quitarDeCola(sesion.id_sesion, idCancion, usuario.id);
-      setTurnos((prev) => prev.filter((t) => t.id_cancion !== idCancion));
-      push("Sacada de la cola", "success");
+      await conAccionLocal(async () => {
+        await api.quitarDeCola(sesion.id_sesion, idCancion, usuario.id);
+        setTurnos((prev) => prev.filter((t) => t.id_cancion !== idCancion));
+        push("Sacada de la cola", "success");
+      });
     } catch (e) {
       push(e.message, "error");
     }
@@ -470,14 +485,15 @@ export default function Karaoke() {
 
   async function siguiente() {
     setPidiendo(true);
-    marcarAccionLocal();
     try {
-      const t = await api.siguienteCancion(sesion.id_sesion, usuario.id);
-      // Comparamos por id_cancion (no por turno): una canción en cola tiene
-      // turno=0 como placeholder hasta que "siguiente" la promueve y le
-      // asigna el turno real, así que filtrar por turno dejaría la fila
-      // vieja de la cola duplicada en el estado local.
-      setTurnos((prev) => [...prev.filter((x) => x.id_cancion !== t.id_cancion), t]);
+      await conAccionLocal(async () => {
+        const t = await api.siguienteCancion(sesion.id_sesion, usuario.id);
+        // Comparamos por id_cancion (no por turno): una canción en cola tiene
+        // turno=0 como placeholder hasta que "siguiente" la promueve y le
+        // asigna el turno real, así que filtrar por turno dejaría la fila
+        // vieja de la cola duplicada en el estado local.
+        setTurnos((prev) => [...prev.filter((x) => x.id_cancion !== t.id_cancion), t]);
+      });
     } catch (e) {
       push(e.message, "error");
     } finally {
@@ -488,12 +504,13 @@ export default function Karaoke() {
   async function marcarCantada(puntuacion) {
     if (marcando) return;
     setMarcando(true);
-    marcarAccionLocal();
     try {
-      const actualizado = await api.marcarCantada(sesion.id_sesion, pendiente.id_cancion, puntuacion);
-      setTurnos((prev) => prev.map((t) => (t.turno === actualizado.turno ? actualizado : t)));
-      setPuntuando(false);
-      push("¡Puntuación registrada! 🌟", "success");
+      await conAccionLocal(async () => {
+        const actualizado = await api.marcarCantada(sesion.id_sesion, pendiente.id_cancion, puntuacion);
+        setTurnos((prev) => prev.map((t) => (t.turno === actualizado.turno ? actualizado : t)));
+        setPuntuando(false);
+        push("¡Puntuación registrada! 🌟", "success");
+      });
     } catch (e) {
       push(e.message, "error");
     } finally {
@@ -504,10 +521,11 @@ export default function Karaoke() {
   async function saltar() {
     if (marcando) return;
     setMarcando(true);
-    marcarAccionLocal();
     try {
-      const actualizado = await api.saltarCancion(sesion.id_sesion, pendiente.id_cancion);
-      setTurnos((prev) => prev.map((t) => (t.turno === actualizado.turno ? actualizado : t)));
+      await conAccionLocal(async () => {
+        const actualizado = await api.saltarCancion(sesion.id_sesion, pendiente.id_cancion);
+        setTurnos((prev) => prev.map((t) => (t.turno === actualizado.turno ? actualizado : t)));
+      });
     } catch (e) {
       push(e.message, "error");
     } finally {

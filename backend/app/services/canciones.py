@@ -231,3 +231,18 @@ def get_por_id(id_cancion: str) -> dict | None:
     if row is None:
         return None
     return _row_to_out(row, {}, set(), None)
+
+
+def get_varias_por_id(ids: list[str]) -> dict[str, dict]:
+    """Trae varias canciones en UNA sola consulta, indexadas por id.
+
+    Existe para que armar el detalle de una sesión no dispare una consulta
+    por turno: cada consulta abre su propia conexión a Postgres y la base
+    está en otra región, así que N+1 consultas se notaban como lentitud
+    real en la vista de Karaoke (que además se refresca por sondeo).
+    """
+    unicos = list({i for i in ids if i})
+    if not unicos:
+        return {}
+    rows = db.fetch_all("SELECT * FROM canciones WHERE id = ANY(%s)", (unicos,))
+    return {r["id"]: _row_to_out(r, {}, set(), None) for r in rows}
