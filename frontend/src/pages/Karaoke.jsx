@@ -722,7 +722,17 @@ export default function Karaoke() {
         {mostrarCola && (
           <div className="flex flex-col gap-1.5 max-h-56 overflow-y-auto border-t border-white/10 pt-2 mt-1">
             {disponiblesParaCola.length === 0 ? (
-              <p className="text-white/40 text-sm text-center py-2">No quedan canciones disponibles.</p>
+              // Sin este atajo la pantalla quedaba sin salida: avisaba que no
+              // quedaban canciones y no ofrecía cómo seguir (hay que cargar
+              // temas nuevos desde la pestaña Canciones, no desde acá).
+              <div className="text-center py-3">
+                <p className="text-white/40 text-sm mb-3">
+                  Ya usaron todas las canciones del grupo esta noche.
+                </p>
+                <button onClick={() => navigate("/")} className="btn-primary !py-1.5 !text-xs">
+                  <IconPlus /> Cargar canciones nuevas
+                </button>
+              </div>
             ) : (
               disponiblesParaCola.map((c) => (
                 <div key={c.id} className="rounded-lg hover:bg-white/5">

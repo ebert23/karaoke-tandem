@@ -201,6 +201,18 @@ def main() -> None:
                     json={"id_usuario_actor": ana["id"], "modo": "cola"})
     check(r.status_code == 400, "modo cola con la cola vacia falla (400), no sortea al azar")
 
+    # Cliente viejo (PWA con el bundle anterior en cache) que NO manda "modo":
+    # tiene que seguir funcionando como antes -- cola si hay, sorteo si no.
+    # Sin esto, un celular con cache vieja recibia 400 y no podia seguir.
+    r = client.post(f"/api/sesiones/{sid}/siguiente", headers=h(g1["id"]),
+                    json={"id_usuario_actor": ana["id"]})
+    check(r.status_code == 200, "sin 'modo' (cliente viejo) sortea igual con la cola vacia")
+    legacy = r.json()
+    # Lo saltamos en vez de marcarlo cantado: hay que dejar la sesion sin
+    # turno pendiente para lo que sigue, pero sin sumar puntos que
+    # descuadren las verificaciones de ranking de mas abajo.
+    client.post(f"/api/sesiones/{sid}/canciones/{legacy['id_cancion']}/saltar", headers=h(g1["id"]))
+
     # detalle: valida el batch de canciones (cada turno con SU cancion correcta)
     det = client.get(f"/api/sesiones/{sid}/detalle", headers=h(g1["id"])).json()
     check(len(det) >= 2, f"detalle devuelve los turnos ({len(det)})")

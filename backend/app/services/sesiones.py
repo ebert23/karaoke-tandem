@@ -184,13 +184,16 @@ def mover_en_cola(id_grupo: str, id_sesion: str, id_cancion: str, id_usuario_act
     return _turnos_to_out(filas_cola)
 
 
-def siguiente_cancion(id_grupo: str, id_sesion: str, id_usuario_actor: str, modo: str = "cola") -> dict:
+def siguiente_cancion(id_grupo: str, id_sesion: str, id_usuario_actor: str, modo: str | None = None) -> dict:
     """Arma el próximo turno.
 
     modo="cola": saca la primera de la cola (y falla si está vacía).
     modo="aleatorio": sortea del catálogo IGNORANDO la cola — lo que está
     encolado queda reservado para cuando se vuelva al modo cola, así que
     tampoco puede salir sorteado.
+    modo=None: comportamiento histórico (primero la cola, y si está vacía
+    sortea). Es lo que mandan los clientes viejos que todavía tienen el
+    bundle anterior cacheado, así que no se les puede romper.
     """
     _requiere_admin(id_grupo, id_usuario_actor)
     sesion_row = db.fetch_one("SELECT * FROM sesiones WHERE id_sesion = %s", (id_sesion,))
@@ -217,13 +220,19 @@ def siguiente_cancion(id_grupo: str, id_sesion: str, id_usuario_actor: str, modo
         raise ValueError("La sesión no tiene participantes")
     cantante = participantes[turno_actual % len(participantes)]
 
-    if modo == "cola":
+    # En modo aleatorio ni miramos la cola. En los otros dos (cola explícita
+    # o cliente viejo sin modo) la cola manda; la diferencia es qué pasa si
+    # está vacía: con "cola" avisamos, sin modo caemos al sorteo de abajo.
+    cola_row = None
+    if modo != "aleatorio":
         cola_row = db.fetch_one(
             "SELECT * FROM canciones_sesion WHERE id_sesion = %s AND estado = 'En cola' ORDER BY orden ASC, id ASC LIMIT 1",
             (id_sesion,),
         )
-        if cola_row is None:
+        if cola_row is None and modo == "cola":
             raise ValueError("La cola está vacía: agregá canciones o cambiá a modo aleatorio")
+
+    if cola_row is not None:
         nuevo_turno = len(turnos_previos) + 1
         # Si la fila ya trae cantante(s) elegidos a mano (dueto/grupal), se
         # respetan; si no, se asigna por rotación como siempre.

@@ -196,7 +196,11 @@ class ColaAccionRequest(BaseModel):
 class SiguienteRequest(ColaAccionRequest):
     # "cola": promueve la primera de la cola. "aleatorio": sortea del
     # catálogo ignorando la cola (lo encolado queda reservado).
-    modo: str = Field(default="cola", pattern="^(cola|aleatorio)$")
+    # None (no viene el campo): comportamiento histórico — primero la cola y
+    # si está vacía sortea. Hace falta porque la app es una PWA: un celular
+    # con el bundle viejo en caché sigue mandando el request sin "modo", y
+    # con un default "cola" se le rompía con un 400 al quedarse sin cola.
+    modo: str | None = Field(default=None, pattern="^(cola|aleatorio)$")
 
 
 class MoverColaRequest(ColaAccionRequest):
