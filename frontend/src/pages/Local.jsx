@@ -32,6 +32,7 @@ export default function Local() {
   const { push } = useToast();
 
   const [mesas, setMesas] = useState([]);
+  const [sesion, setSesion] = useState(undefined); // undefined = cargando, null = noche cerrada
   const [codigoDj, setCodigoDj] = useState("");
   const [nueva, setNueva] = useState({ numero: "", tamano: 2 });
   const [ocupado, setOcupado] = useState(false);
@@ -40,10 +41,13 @@ export default function Local() {
 
   const esSalon = grupo?.modo === "salon";
   const esAdmin = usuario && grupo?.admins?.includes(usuario.id);
+  const nocheAbierta = !!sesion;
 
   async function cargar() {
     try {
-      setMesas(await api.mesas());
+      const [m, s] = await Promise.all([api.mesas(), api.sesionActiva()]);
+      setMesas(m);
+      setSesion(s);
     } catch (e) {
       push(e.message, "error");
     }
@@ -53,6 +57,36 @@ export default function Local() {
     if (esSalon) cargar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [esSalon]);
+
+  // Sin una sesión activa las mesas no tienen dónde encolar, así que abrirlas
+  // fallaba con un 400 que el dueño no tenía forma de anticipar. Ahora la
+  // noche se abre desde acá, que es donde está mirando.
+  async function abrirNoche() {
+    setOcupado(true);
+    try {
+      await api.crearSesion([grupo.nombre || "Salón"]);
+      await cargar();
+      push("Noche abierta. Ya podés abrir mesas.", "success");
+    } catch (e) {
+      push(e.message, "error");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  async function cerrarNoche() {
+    setOcupado(true);
+    try {
+      await api.cerrarTodasLasMesas();
+      await api.finalizarSesion(sesion.id_sesion);
+      await cargar();
+      push("Noche cerrada y mesas liberadas.", "success");
+    } catch (e) {
+      push(e.message, "error");
+    } finally {
+      setOcupado(false);
+    }
+  }
 
   async function convertir() {
     setOcupado(true);
@@ -175,6 +209,30 @@ export default function Local() {
         </button>
       </header>
 
+      {/* --- Estado de la noche --- */}
+      {sesion === undefined ? null : nocheAbierta ? (
+        <section className="card p-4 flex items-center justify-between gap-3 border-emerald-500/30 bg-emerald-500/5">
+          <div>
+            <p className="font-display font-semibold text-sm text-emerald-300">Noche abierta</p>
+            <p className="text-white/40 text-xs">Las mesas ya pueden pedir canciones.</p>
+          </div>
+          <button onClick={cerrarNoche} disabled={ocupado} className="btn-danger !text-xs shrink-0">
+            Cerrar la noche
+          </button>
+        </section>
+      ) : (
+        <section className="card p-4 border-amber-400/30 bg-amber-400/5 space-y-2">
+          <p className="font-display font-semibold text-sm text-amber-200">No hay una noche abierta</p>
+          <p className="text-white/50 text-xs">
+            Abrila para que las mesas puedan encolar canciones y el DJ vea la rotación. Al cerrarla
+            se liberan todas las mesas.
+          </p>
+          <button onClick={abrirNoche} disabled={ocupado} className="btn-primary w-full">
+            ▶ Abrir la noche
+          </button>
+        </section>
+      )}
+
       {/* --- Acceso del DJ --- */}
       <section className="card p-4 space-y-2">
         <h2 className="label !mb-0">Acceso del DJ</h2>
@@ -255,7 +313,14 @@ export default function Local() {
                 </p>
                 <code className="text-white/35 text-xs">{m.codigo}</code>
               </div>
-              <button onClick={() => alternar(m)} disabled={ocupado} className="btn-ghost !text-xs shrink-0">
+              <button
+                onClick={() => alternar(m)}
+                // Sin noche abierta, "Abrir" solo puede terminar en error:
+                // mejor que se vea deshabilitado y con el motivo a la vista.
+                disabled={ocupado || (m.estado !== "Abierta" && !nocheAbierta)}
+                title={m.estado !== "Abierta" && !nocheAbierta ? "Primero abrí la noche" : ""}
+                className="btn-ghost !text-xs shrink-0"
+              >
                 {m.estado === "Abierta" ? "Cerrar" : "Abrir"}
               </button>
               {m.estado !== "Abierta" && (

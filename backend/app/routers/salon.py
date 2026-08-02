@@ -45,9 +45,12 @@ def _requiere_admin(id_grupo: str, id_usuario_actor: str) -> None:
 
 
 def _sesion_activa_o_error(id_grupo: str) -> str:
+    # Mensaje neutro a propósito: lo leen tres públicos distintos (dueño, DJ y
+    # cliente en la mesa) y solo el dueño puede hacer algo al respecto, así que
+    # no puede decir "creá la sesión".
     sesion = sesiones_svc.get_activa(id_grupo)
     if sesion is None:
-        raise HTTPException(400, "No hay una noche abierta: creá la sesión primero")
+        raise HTTPException(400, "El local todavía no abrió la noche")
     return sesion["id_sesion"]
 
 
@@ -86,6 +89,18 @@ def cerrar_mesa(id_mesa: str, id_grupo: str = Depends(get_grupo_id)):
         return mesas_svc.cerrar(id_grupo, id_mesa)
     except ValueError as e:
         raise HTTPException(404, str(e))
+
+
+@router.post("/api/mesas/cerrar-todas", response_model=list[MesaOut])
+def cerrar_todas_las_mesas(id_grupo: str = Depends(get_grupo_id)):
+    """Fin de la noche: cierra todas las mesas de una.
+
+    Existe porque cerrarlas a mano de a una, a las 3 de la mañana, es algo que
+    nadie hace — y una mesa que queda abierta arrastra sus pedidos a la noche
+    siguiente.
+    """
+    mesas_svc.cerrar_todas(id_grupo)
+    return mesas_svc.listar(id_grupo)
 
 
 @router.delete("/api/mesas/{id_mesa}", status_code=204)

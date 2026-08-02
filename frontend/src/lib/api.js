@@ -150,6 +150,7 @@ export const api = {
   crearMesa: (numero, tamano) => post("/mesas", { numero, tamano }),
   abrirMesa: (idMesa, tamano) => post(`/mesas/${idMesa}/abrir`, { tamano }),
   cerrarMesa: (idMesa) => post(`/mesas/${idMesa}/cerrar`),
+  cerrarTodasLasMesas: () => post("/mesas/cerrar-todas"),
   eliminarMesa: (idMesa, idUsuarioActor) => del(`/mesas/${idMesa}`, { id_usuario_actor: idUsuarioActor }),
   pantallaSalon: () => get("/salon/pantalla"),
 
