@@ -158,17 +158,39 @@ export default function Mesa() {
             <p className="text-white/40 text-xs uppercase tracking-widest">Mesa</p>
             <h1 className="title-glow text-2xl leading-none">{estado.mesa.numero}</h1>
           </div>
-          <div className="flex-1 max-w-[55%]">
-            <input
-              value={nombre}
-              onChange={(e) => guardarNombre(e.target.value)}
-              placeholder="Tu nombre"
-              maxLength={40}
-              className="input !py-2 !text-sm"
-            />
-          </div>
+          {/* Con el nombre ya puesto alcanza con una cajita chica para
+              corregirlo. Sin nombre, el pedido no puede salir, y eso merece
+              la tarjeta grande de abajo en vez de un input escondido acá. */}
+          {nombre.trim() && (
+            <div className="flex-1 max-w-[55%]">
+              <input
+                value={nombre}
+                onChange={(e) => guardarNombre(e.target.value)}
+                placeholder="Tu nombre"
+                maxLength={40}
+                className="input !py-2 !text-sm"
+              />
+            </div>
+          )}
         </div>
       </header>
+
+      {!nombre.trim() && (
+        <div className="m-4 p-4 rounded-2xl border border-amber-400/40 bg-amber-400/10">
+          <p className="font-display font-bold text-amber-200">¿Cómo te llamás?</p>
+          <p className="text-white/60 text-sm mt-1 mb-3">
+            El DJ va a decir tu nombre por el micrófono cuando te toque.
+          </p>
+          <input
+            value={nombre}
+            onChange={(e) => guardarNombre(e.target.value)}
+            placeholder="Tu nombre"
+            maxLength={40}
+            autoFocus
+            className="input"
+          />
+        </div>
+      )}
 
       {estado.ahora && (
         <div
@@ -239,10 +261,19 @@ export default function Mesa() {
                 </div>
                 <button
                   onClick={() => pedir(c)}
-                  disabled={yaPedida || pidiendo === c.id}
+                  // Sin nombre el pedido no puede salir: mejor que el botón
+                  // lo diga en vez de aceptar el toque y tirar un aviso que
+                  // se desvanece.
+                  disabled={yaPedida || pidiendo === c.id || !nombre.trim()}
                   className="btn-primary !px-3 !py-1.5 !text-xs shrink-0"
                 >
-                  {yaPedida ? "Anotada" : pidiendo === c.id ? "…" : "+ Cantar"}
+                  {yaPedida
+                    ? "Anotada"
+                    : pidiendo === c.id
+                      ? "…"
+                      : !nombre.trim()
+                        ? "Poné tu nombre ↑"
+                        : "+ Cantar"}
                 </button>
               </li>
             );
