@@ -30,6 +30,24 @@ def sugerencias(genero: str | None = None):
     return svc.sugerencias(genero)
 
 
+@router.get("/duplicada", response_model=CancionOut | None)
+def duplicada(
+    titulo: str = "",
+    artista: str = "",
+    link_youtube: str = "",
+    id_grupo: str = Depends(get_grupo_id),
+    excluir_id: str = "",
+):
+    """La canción del grupo que ya representa a esta, o null.
+
+    La usa el formulario para avisar mientras se escribe, antes de que la
+    persona termine de cargar todo y recién ahí se entere de que ya estaba.
+    La regla vive en el servicio y no repetida en el front, así el aviso y el
+    rechazo del alta no pueden decir cosas distintas.
+    """
+    return svc.duplicada(id_grupo, titulo, artista, link_youtube, excluir_id=excluir_id)
+
+
 @router.get("/export.csv")
 def exportar_csv(id_grupo: str = Depends(get_grupo_id)):
     contenido = svc.exportar_csv(id_grupo)
@@ -42,13 +60,18 @@ def exportar_csv(id_grupo: str = Depends(get_grupo_id)):
 
 @router.post("", response_model=CancionOut)
 def crear(data: CancionCreate, id_grupo: str = Depends(get_grupo_id)):
-    return svc.crear(id_grupo, data)
+    try:
+        return svc.crear(id_grupo, data)
+    except svc.CancionDuplicada as e:
+        raise HTTPException(400, str(e))
 
 
 @router.put("/{id_cancion}", response_model=CancionOut)
 def actualizar(id_cancion: str, data: CancionUpdate, id_grupo: str = Depends(get_grupo_id)):
     try:
         return svc.actualizar(id_grupo, id_cancion, data.id_usuario, data)
+    except svc.CancionDuplicada as e:
+        raise HTTPException(400, str(e))
     except PermissionError as e:
         raise HTTPException(403, str(e))
     except ValueError as e:

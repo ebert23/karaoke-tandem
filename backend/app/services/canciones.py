@@ -2,6 +2,8 @@
 sugerencias por género y export CSV."""
 import csv
 import io
+import re
+import unicodedata
 
 from .. import db
 from ..curated_data import SUGERENCIAS_POR_GENERO
@@ -13,6 +15,86 @@ CANCIONES_HEADERS = [
     "ID", "ID Grupo", "Título", "Artista", "Género", "Link YouTube",
     "Agregado por", "Fecha agregado", "Votos", "Veces cantada",
 ]
+
+
+# Palabras de adorno que traen los títulos copiados de YouTube y que no
+# distinguen una canción de otra: "Mientes (Video Oficial)" y "Mientes" son la
+# misma. No se sacan "remix", "acustico" ni "en vivo": ahí sí puede haber dos
+# pistas distintas que alguien quiera tener separadas.
+_RUIDO = re.compile(
+    r"\b(karaoke|version karaoke|lyrics?|letra|con letra|letras|official|oficial"
+    r"|video|videoclip|audio|hd|hq|4k|1080p|full|completa|remaster|remastered)\b"
+)
+
+
+def _clave(titulo: str, artista: str) -> str:
+    """Forma normalizada de "título de artista", para comparar duplicados.
+
+    Ignora mayúsculas, tildes, puntuación, lo que va entre paréntesis o
+    corchetes y las palabras de adorno. Así "Mientes Tan Bien" y
+    "MIENTES TAN BIEN (Video Oficial) HD" caen en la misma clave.
+    """
+    def limpiar(s: str) -> str:
+        s = unicodedata.normalize("NFKD", (s or "").strip().lower())
+        s = "".join(c for c in s if not unicodedata.combining(c))
+        s = re.sub(r"[\(\[][^\)\]]*[\)\]]", " ", s)
+        s = _RUIDO.sub(" ", s)
+        s = re.sub(r"[^a-z0-9 ]", " ", s)
+        return re.sub(r"\s+", " ", s).strip()
+
+    return f"{limpiar(titulo)}|{limpiar(artista)}"
+
+
+def _video_id(link: str) -> str | None:
+    """Id del video de YouTube, en cualquiera de los formatos de link.
+
+    Dos filas con el mismo video son la misma canción aunque las hayan
+    titulado distinto — es la forma más confiable de detectar el duplicado,
+    porque el título lo escribe cada uno a su manera.
+    """
+    m = re.search(r"(?:youtu\.be/|[?&]v=|youtube\.com/embed/|youtube\.com/shorts/)([\w-]{11})", link or "")
+    return m.group(1) if m else None
+
+
+def buscar_duplicada(
+    id_grupo: str, titulo: str, artista: str, link_youtube: str = "", excluir_id: str = ""
+) -> dict | None:
+    """La canción del grupo que ya representa a esta, o None.
+
+    Existe para que la lista del grupo no junte la misma canción tres veces:
+    pasaba de verdad, porque nadie revisa 50 títulos antes de agregar uno.
+    """
+    clave_nueva = _clave(titulo, artista)
+    video_nuevo = _video_id(link_youtube)
+    for row in db.fetch_all("SELECT * FROM canciones WHERE id_grupo = %s", (id_grupo,)):
+        if row["id"] == excluir_id:
+            continue
+        if video_nuevo and _video_id(row["link_youtube"]) == video_nuevo:
+            return row
+        if clave_nueva != "|" and _clave(row["titulo"], row["artista"]) == clave_nueva:
+            return row
+    return None
+
+
+class CancionDuplicada(ValueError):
+    """Subclase para que el router pueda responder 400 y no confundirla con
+    el otro ValueError de estas rutas ("Canción no encontrada", que es 404)."""
+
+
+def duplicada(
+    id_grupo: str, titulo: str, artista: str, link_youtube: str = "", excluir_id: str = ""
+) -> dict | None:
+    """Igual que buscar_duplicada pero en el formato que devuelve la API."""
+    row = buscar_duplicada(id_grupo, titulo, artista, link_youtube, excluir_id=excluir_id)
+    return _row_to_out(row, {}, set(), None) if row else None
+
+
+def _error_duplicada(existente: dict) -> CancionDuplicada:
+    quien = existente["agregado_por"].strip()
+    detalle = f" (la agregó {quien})" if quien else ""
+    return CancionDuplicada(
+        f'"{existente["titulo"]}" de {existente["artista"]} ya está en la lista del grupo{detalle}'
+    )
 
 
 def _row_to_out(
@@ -89,6 +171,11 @@ def crear(id_grupo: str, data) -> dict:
     genero = data.genero.strip()
     link_youtube = data.link_youtube.strip()
     agregado_por = data.agregado_por.strip()
+
+    existente = buscar_duplicada(id_grupo, titulo, artista, link_youtube)
+    if existente is not None:
+        raise _error_duplicada(existente)
+
     db.execute(
         "INSERT INTO canciones (id, id_grupo, titulo, artista, genero, link_youtube, "
         "agregado_por, fecha_agregado, votos, veces_cantada) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 0, 0)",
@@ -125,6 +212,13 @@ def actualizar(id_grupo: str, id_cancion: str, id_usuario: str, data) -> dict:
     artista = data.artista.strip()
     genero = data.genero.strip()
     link_youtube = data.link_youtube.strip()
+
+    # Mismo control que al crear: editar es la otra forma de terminar con dos
+    # filas iguales. Se excluye la propia, si no no se podría ni corregir el género.
+    existente = buscar_duplicada(id_grupo, titulo, artista, link_youtube, excluir_id=id_cancion)
+    if existente is not None:
+        raise _error_duplicada(existente)
+
     db.execute(
         "UPDATE canciones SET titulo = %s, artista = %s, genero = %s, link_youtube = %s WHERE id = %s",
         (titulo, artista, genero, link_youtube, id_cancion),

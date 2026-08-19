@@ -302,6 +302,32 @@ export default function Semana() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ titulo: "", artista: "", genero: "", link_youtube: "" });
   const [enviando, setEnviando] = useState(false);
+  const [duplicada, setDuplicada] = useState(null);
+
+  // Avisa mientras se escribe, en vez de dejar que llene todo el formulario
+  // para enterarse recién al guardar. Se pregunta al backend (y no se compara
+  // contra la lista cargada acá) por dos motivos: esa lista viene filtrada por
+  // género o búsqueda, así que la repetida puede no estar; y el criterio de
+  // "es la misma canción" tiene que ser uno solo.
+  useEffect(() => {
+    const titulo = form.titulo.trim();
+    const link = form.link_youtube.trim();
+    if (!showForm || (!titulo && !link)) {
+      setDuplicada(null);
+      return;
+    }
+    let vivo = true;
+    const t = setTimeout(() => {
+      api
+        .cancionDuplicada({ titulo, artista: form.artista.trim(), link_youtube: link })
+        .then((c) => vivo && setDuplicada(c))
+        .catch(() => vivo && setDuplicada(null));
+    }, 400);
+    return () => {
+      vivo = false;
+      clearTimeout(t);
+    };
+  }, [showForm, form.titulo, form.artista, form.link_youtube]);
 
   async function cargar() {
     setLoading(true);
@@ -460,12 +486,21 @@ export default function Semana() {
             genero={form.genero}
             onElegir={(s) => setForm((f) => ({ ...f, titulo: s.titulo, artista: s.artista, genero: s.genero }))}
           />
+          {duplicada && (
+            <div className="sm:col-span-2 p-3 rounded-xl border border-amber-400/40 bg-amber-400/10">
+              <p className="font-semibold text-sm text-amber-200">Esa canción ya está en la lista</p>
+              <p className="text-white/60 text-sm mt-0.5">
+                “{duplicada.titulo}” — {duplicada.artista}
+                {duplicada.agregado_por ? `, la agregó ${duplicada.agregado_por}` : ""}.
+              </p>
+            </div>
+          )}
           <div className="sm:col-span-2 flex justify-end gap-2 mt-1">
             <button type="button" className="btn-ghost" onClick={() => setShowForm(false)}>
               Cancelar
             </button>
-            <button className="btn-primary" disabled={enviando}>
-              {enviando ? "Guardando…" : "Guardar canción"}
+            <button className="btn-primary" disabled={enviando || !!duplicada}>
+              {enviando ? "Guardando…" : duplicada ? "Ya está en la lista" : "Guardar canción"}
             </button>
           </div>
         </form>

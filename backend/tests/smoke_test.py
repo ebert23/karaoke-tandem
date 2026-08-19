@@ -138,6 +138,56 @@ def main() -> None:
                    json={"titulo": "hack", "artista": "X", "genero": "Pop", "id_usuario": luis["id"]})
     check(r.status_code == 200, "Luis puede editar la suya")
 
+    # ---------------- Sin canciones repetidas en la lista del grupo ----------------
+    base = client.post("/api/canciones", headers=h(g1["id"]), json={
+        "titulo": "Mientes Tan Bien", "artista": "Sin Bandera", "genero": "Balada",
+        "link_youtube": "https://youtu.be/aBcDeFgHiJ1", "agregado_por": "Ana"}).json()
+
+    def alta(titulo, artista, link="", autor="Luis"):
+        return client.post("/api/canciones", headers=h(g1["id"]), json={
+            "titulo": titulo, "artista": artista, "genero": "Balada",
+            "link_youtube": link, "agregado_por": autor})
+
+    r = alta("Mientes Tan Bien", "Sin Bandera")
+    check(r.status_code == 400, "no se puede agregar la misma cancion dos veces")
+    check("ya está en la lista" in r.json()["detail"] and "Ana" in r.json()["detail"],
+          f"el aviso dice cual es y quien la agrego: {r.json()['detail']}")
+
+    r = alta("MIENTES TAN BIEN (Video Oficial) HD", "sin bandera")
+    check(r.status_code == 400, "tampoco con mayusculas, tildes ni adornos de YouTube en el titulo")
+
+    r = alta("Mienten Bien", "Sin Bandera")
+    check(r.status_code == 200, "una cancion parecida pero distinta si entra")
+    client.request("DELETE", f"/api/canciones/{r.json()['id']}", headers=h(g1["id"]),
+                   json={"id_usuario": luis["id"]})
+
+    r = alta("Otro titulo completamente distinto", "Otro Artista",
+             "https://www.youtube.com/watch?v=aBcDeFgHiJ1")
+    check(r.status_code == 400, "mismo video de YouTube = misma cancion, aunque la titulen distinto")
+
+    # El formulario pregunta antes de que la persona termine de escribir.
+    r = client.get("/api/canciones/duplicada", headers=h(g1["id"]),
+                   params={"titulo": "mientes tan bien", "artista": "Sin Bandera"})
+    check(r.status_code == 200 and r.json() and r.json()["id"] == base["id"],
+          "el aviso previo encuentra la repetida antes de guardar")
+    r = client.get("/api/canciones/duplicada", headers=h(g1["id"]),
+                   params={"titulo": "Algo que nadie cargo", "artista": "Nadie"})
+    check(r.status_code == 200 and r.json() is None, "y no avisa de nada cuando la cancion es nueva")
+
+    # Editar es la otra forma de terminar con dos filas iguales...
+    r = client.put(f"/api/canciones/{c_luis['id']}", headers=h(g1["id"]), json={
+        "titulo": "Mientes Tan Bien", "artista": "Sin Bandera", "genero": "Balada",
+        "id_usuario": luis["id"]})
+    check(r.status_code == 400, "editar una cancion para dejarla igual que otra tambien se rechaza")
+    # ...pero la canción no puede chocar consigo misma.
+    r = client.put(f"/api/canciones/{base['id']}", headers=h(g1["id"]), json={
+        "titulo": "Mientes Tan Bien", "artista": "Sin Bandera", "genero": "Pop",
+        "link_youtube": base["link_youtube"], "id_usuario": ana["id"]})
+    check(r.status_code == 200 and r.json()["genero"] == "Pop",
+          "se le puede corregir el genero a una cancion sin que se acuse a si misma")
+    client.request("DELETE", f"/api/canciones/{base['id']}", headers=h(g1["id"]),
+                   json={"id_usuario": ana["id"]})
+
     # ---------------- Sesiones: flujo completo ----------------
     ses = client.post("/api/sesiones", headers=h(g1["id"]), json={"participantes": ["Ana", "Luis"]}).json()
     check(ses["estado"] == "Activa" and ses["turno_actual"] == 0, "crear sesion activa en turno 0")

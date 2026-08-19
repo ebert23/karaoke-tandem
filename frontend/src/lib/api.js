@@ -107,6 +107,10 @@ export const api = {
   votarCancion: (idCancion, idUsuario) => post(`/canciones/${idCancion}/votar`, { id_usuario: idUsuario }),
   favoritoToggle: (idCancion, idUsuario) => post(`/canciones/${idCancion}/favorito`, { id_usuario: idUsuario }),
   sugerencias: (genero) => get(`/canciones/sugerencias${qs({ genero })}`),
+  // Devuelve la canción del grupo que ya representa a esta, o null. El
+  // criterio vive en el backend para que el aviso del formulario y el rechazo
+  // del alta no puedan discrepar.
+  cancionDuplicada: (params) => get(`/canciones/duplicada${qs(params)}`),
   buscarYoutube: (q) => get(`/youtube/buscar${qs({ q })}`),
   exportCsvUrl: () => `${BASE}/canciones/export.csv`,
 
