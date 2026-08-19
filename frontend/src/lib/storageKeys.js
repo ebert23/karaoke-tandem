@@ -14,6 +14,10 @@ export function nombreMesaStorageKey(codigo) {
   return `kt_mesa_nombre_${codigo}`;
 }
 
+// "No me ofrezcas más instalar la app". No se borra al cerrar sesión: es una
+// preferencia del dispositivo, no del grupo.
+export const INSTALAR_STORAGE_KEY = "kt_instalar_oculto";
+
 export function usuarioStorageKey(idGrupo) {
   return `kt_usuario_${idGrupo}`;
 }

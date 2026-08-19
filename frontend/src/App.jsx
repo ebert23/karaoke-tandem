@@ -2,6 +2,7 @@ import React from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import GroupGate from "./components/GroupGate.jsx";
 import IdentityGate from "./components/IdentityGate.jsx";
+import InstalarApp from "./components/InstalarApp.jsx";
 import Shell from "./components/Shell.jsx";
 import { GroupProvider } from "./lib/GroupContext.jsx";
 import { IdentityProvider } from "./lib/IdentityContext.jsx";
@@ -21,6 +22,9 @@ import TV from "./pages/TV.jsx";
 export default function App() {
   return (
     <ToastProvider>
+      {/* Fuera de las rutas: la invitación a instalar vale igual en la vista
+          del cliente en la mesa, en la del DJ y en la de grupo. */}
+      <InstalarApp />
       <Routes>
         {/* Modo salón: dos flujos que NO pasan por GroupGate/IdentityGate.
             El cliente entra escaneando el QR de su mesa y el DJ con su

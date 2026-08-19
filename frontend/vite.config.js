@@ -8,17 +8,27 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["icons/icon.svg"],
+      includeAssets: ["icons/icon.svg", "icons/apple-touch-icon-180.png"],
       manifest: {
         name: "KaraokeTandem",
         short_name: "Karaoke",
         description: "Karaoke party app: canciones, turnos, retos y ranking.",
+        lang: "es",
         theme_color: "#0a0a0f",
         background_color: "#0a0a0f",
         display: "standalone",
+        orientation: "portrait",
         start_url: "/",
+        scope: "/",
+        // Android/Chrome NO ofrecen instalar la app si no hay PNG de 192 y
+        // 512: el SVG solo servía para la pestaña. El "maskable" aparte es
+        // para que el launcher pueda recortarlo con su propia forma sin
+        // comerse el dibujo (ver frontend/scripts/generar_iconos.py).
         icons: [
-          { src: "/icons/icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any maskable" },
+          { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+          { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+          { src: "/icons/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+          { src: "/icons/icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" },
         ],
       },
       workbox: {

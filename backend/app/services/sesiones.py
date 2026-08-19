@@ -3,6 +3,7 @@ canción, participantes en vivo, votación en tiempo real, marcar cantada /
 saltar y cierre e historial.
 """
 import random
+import unicodedata
 from datetime import datetime
 
 from .. import db
@@ -10,6 +11,21 @@ from . import canciones as canciones_svc
 from . import grupos as grupos_svc
 from . import usuarios as usuarios_svc
 from .ids import new_id, now_iso
+
+
+def _mismo_nombre(a: str, b: str) -> bool:
+    """Compara nombres de persona ignorando mayúsculas, espacios y tildes.
+
+    Hace falta porque `canciones.agregado_por` y `sesiones.participantes`
+    guardan el nombre tipeado a mano, no un id: el mismo usuario puede haber
+    quedado como "Juan Carlos" en una y "juan carlos" en la otra, y en un
+    teclado de celular las tildes se comen todo el tiempo.
+    """
+    def limpio(s: str) -> str:
+        sin_tildes = unicodedata.normalize("NFKD", (s or "").strip().lower())
+        return "".join(c for c in sin_tildes if not unicodedata.combining(c))
+
+    return bool(limpio(a)) and limpio(a) == limpio(b)
 
 
 def _sesion_row_to_out(row: dict) -> dict:
@@ -190,9 +206,11 @@ def siguiente_cancion(id_grupo: str, id_sesion: str, id_usuario_actor: str, modo
     """Arma el próximo turno.
 
     modo="cola": saca la primera de la cola (y falla si está vacía).
-    modo="aleatorio": sortea del catálogo IGNORANDO la cola — lo que está
-    encolado queda reservado para cuando se vuelva al modo cola, así que
-    tampoco puede salir sorteado.
+    modo="aleatorio": sortea entre las canciones que cargó el cantante al que
+    le toca este turno, IGNORANDO la cola — lo que está encolado queda
+    reservado para cuando se vuelva al modo cola, así que tampoco puede salir
+    sorteado. Si a esa persona ya no le quedan propias sin cantar, recién ahí
+    se sortea del resto del catálogo.
     modo=None: comportamiento histórico (primero la cola, y si está vacía
     sortea). Es lo que mandan los clientes viejos que todavía tienen el
     bundle anterior cacheado, así que no se les puede romper.
@@ -262,7 +280,13 @@ def siguiente_cancion(id_grupo: str, id_sesion: str, id_usuario_actor: str, modo
     if not disponibles:
         raise ValueError("No quedan canciones disponibles en la lista")
 
-    elegida = random.choice(disponibles)
+    # A cada quien le tocan SUS canciones: el sorteo se hace entre las que
+    # cargó el cantante de este turno, no entre todo el catálogo del grupo.
+    # Es lo que la gente espera — uno anota las que se sabe, no las del otro.
+    propias = [c for c in disponibles if _mismo_nombre(c["agregado_por"], cantante)]
+    # Si ya cantó todas las suyas, antes de cortar la noche se sortea del
+    # resto: quedarse sin canción propia no puede significar "no cantás más".
+    elegida = random.choice(propias or disponibles)
     nuevo_turno = len(turnos_previos) + 1
     row = db.fetch_one(
         "INSERT INTO canciones_sesion (id_sesion, id_grupo, id_cancion, orden, turno, cantada_por, puntuacion, estado) "

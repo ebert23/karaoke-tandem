@@ -307,9 +307,62 @@ def main() -> None:
     check(client.get("/api/youtube/buscar", params={"q": "test"}).status_code in (200, 501),
           "youtube buscar responde (200 con API key, 501 sin ella)")
 
+    aleatorio_por_jugador()
     salon()
 
     print(f"\nTODOS LOS CHECKS PASARON ({_checks})")
+
+
+def aleatorio_por_jugador() -> None:
+    """El sorteo le da a cada quien SUS canciones, y de verdad sortea.
+
+    Dos cosas distintas que la gente notó jugando: que salían canciones que
+    había cargado otro, y que parecían salir en el orden en que se cargaron.
+    Por eso el test verifica las dos: de quién es cada canción, y que el orden
+    no sea el de alta.
+    """
+    gid = crear_grupo("Smoke Aleatorio", "Ana")["id"]
+    ana = client.post("/api/usuarios", headers=h(gid), json={"nombre": "Ana"}).json()
+    client.post("/api/usuarios", headers=h(gid), json={"nombre": "Luis"}).json()
+
+    # Listas de distinto tamaño a propósito: asi mas adelante a Ana se le
+    # acaban las suyas mientras a Luis todavia le sobran.
+    de_ana = [nueva_cancion(gid, f"Ana{i}", autor="Ana")["id"] for i in range(6)]
+    # "LUÍS" con tilde y en mayusculas a proposito: el nombre se tipea a mano
+    # en dos lugares distintos y casi nunca coincide caracter por caracter.
+    de_luis = [nueva_cancion(gid, f"Luis{i}", autor="LUÍS")["id"] for i in range(12)]
+
+    sid = client.post("/api/sesiones", headers=h(gid),
+                      json={"participantes": ["Ana", "Luis"]}).json()["id_sesion"]
+
+    def un_turno() -> dict:
+        t = client.post(f"/api/sesiones/{sid}/siguiente", headers=h(gid),
+                        json={"id_usuario_actor": ana["id"], "modo": "aleatorio"}).json()
+        client.post(f"/api/sesiones/{sid}/canciones/{t['id_cancion']}/cantada",
+                    headers=h(gid), json={"puntuacion": 7})
+        return t
+
+    salidas = [un_turno() for _ in range(10)]  # 5 turnos de cada uno
+    de_cada = {"Ana": de_ana, "Luis": de_luis}
+    check(all(t["id_cancion"] in de_cada[t["cantada_por"]] for t in salidas),
+          "a cada uno le tocan solo las canciones que cargo el, no las del otro")
+    check(len([t for t in salidas if t["cantada_por"] == "Luis"]) == 5,
+          "la rotacion entre los dos participantes se mantiene")
+
+    # Que las 5 de cada uno salgan justo en el orden de alta tiene 1 en 120 de
+    # probabilidad; que pase en los dos a la vez, 1 en 14400.
+    orden_ana = [de_ana.index(t["id_cancion"]) for t in salidas if t["cantada_por"] == "Ana"]
+    orden_luis = [de_luis.index(t["id_cancion"]) for t in salidas if t["cantada_por"] == "Luis"]
+    check(orden_ana != sorted(orden_ana) or orden_luis != sorted(orden_luis),
+          f"el sorteo no devuelve las canciones en el orden en que se cargaron: {orden_ana} / {orden_luis}")
+
+    # Cuando a alguien se le acaban las propias tiene que seguir cantando: la
+    # noche no se corta porque uno cargo menos canciones que el otro. A Ana le
+    # queda 1 sola, asi que en 4 turnos mas se queda sin nada propio.
+    restantes = [un_turno() for _ in range(4)]
+    prestadas = [t for t in restantes if t["cantada_por"] == "Ana" and t["id_cancion"] in de_luis]
+    check(len(prestadas) == 1 and prestadas[0]["cancion"] is not None,
+          "si al que le toca no le quedan canciones propias, igual se le sortea una del resto")
 
 
 def salon() -> None:

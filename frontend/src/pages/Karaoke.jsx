@@ -430,6 +430,13 @@ export default function Karaoke() {
   const pendiente = turnos.find((t) => t.estado === "Pendiente");
   const cola = turnos.filter((t) => t.estado === "En cola");
   const resueltos = turnos.filter((t) => t.estado !== "En cola");
+  // Quién canta el turno que viene: misma rotación que hace el backend, pero
+  // contada sobre los turnos ya jugados en vez de sesion.turno_actual — ese
+  // campo solo se refresca al recargar todo, y el sondeo trae los turnos.
+  const turnosJugados = turnos.filter((t) => t.turno > 0).length;
+  const proximoCantante = sesion?.participantes?.length
+    ? sesion.participantes[turnosJugados % sesion.participantes.length]
+    : null;
   const idsUsadas = new Set(turnos.map((t) => t.id_cancion));
   const disponiblesParaCola = canciones.filter((c) => !idsUsadas.has(c.id));
 
@@ -638,8 +645,8 @@ export default function Karaoke() {
               ? cola.length > 0
                 ? `Sigue "${cola[0].cancion?.titulo}" (primera en la cola)`
                 : "La cola está vacía — agregá canciones o cambiá a Aleatorio"
-              : cola.length > 0
-              ? "Modo aleatorio: se sortea del catálogo (la cola queda esperando)"
+              : proximoCantante
+              ? `Modo aleatorio: le toca a ${proximoCantante} y se sortea entre las canciones que cargó`
               : "Listo para el siguiente turno"}
           </p>
           {esAdmin ? (
