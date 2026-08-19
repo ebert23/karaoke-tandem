@@ -22,11 +22,15 @@ def estadisticas(id_grupo: str, id_usuario: str) -> dict:
         if nombre_lower in [n.strip().lower() for n in r["cantada_por"].split(",") if n.strip()]
     ]
 
+    # Las canciones se traen en UNA consulta: antes era una por turno cantado,
+    # y como la base está en otra región eso se notaba al abrir la pantalla.
+    canciones = canciones_svc.get_varias_por_id([r["id_cancion"] for r in filas])
+
     detalle = []
     generos = Counter()
     puntuaciones = []
     for r in filas:
-        cancion = canciones_svc.get_por_id(r["id_cancion"])
+        cancion = canciones.get(r["id_cancion"])
         if not cancion:
             continue
         puntuacion = r["puntuacion"]

@@ -358,9 +358,61 @@ def main() -> None:
           "youtube buscar responde (200 con API key, 501 sin ella)")
 
     aleatorio_por_jugador()
+    badges_del_ranking()
     salon()
 
     print(f"\nTODOS LOS CHECKS PASARON ({_checks})")
+
+
+def badges_del_ranking() -> None:
+    """Los logros del ranking, que se calculan al vuelo sobre el historial.
+
+    Importa porque el ranking arma ese historial una sola vez y lo comparte
+    entre todas las personas: si esa carga compartida quedara mal, los badges
+    saldrían de otro o directamente no saldrían.
+    """
+    gid = crear_grupo("Smoke Badges", "Ana")["id"]
+    ana = client.post("/api/usuarios", headers=h(gid), json={"nombre": "Ana"}).json()
+
+    for i, genero in enumerate(("Pop", "Rock", "Balada")):
+        client.post("/api/canciones", headers=h(gid), json={
+            "titulo": f"Tema {i}", "artista": f"Artista {i}", "genero": genero, "agregado_por": "Ana"})
+
+    sid = client.post("/api/sesiones", headers=h(gid), json={"participantes": ["Ana"]}).json()["id_sesion"]
+
+    def cantar(puntuacion: int) -> None:
+        t = client.post(f"/api/sesiones/{sid}/siguiente", headers=h(gid),
+                        json={"id_usuario_actor": ana["id"], "modo": "aleatorio"}).json()
+        client.post(f"/api/sesiones/{sid}/canciones/{t['id_cancion']}/cantada",
+                    headers=h(gid), json={"puntuacion": puntuacion})
+
+    def codigos_de_ana() -> set[str]:
+        hist = client.get("/api/ranking/historico", headers=h(gid)).json()
+        fila = next(x for x in hist if x["nombre"].lower() == "ana")
+        return {b["codigo"] for b in fila["badges"]}
+
+    check(codigos_de_ana() == set(), "sin cantar todavia no hay ningun badge")
+
+    for _ in range(3):
+        cantar(10)
+    codigos = codigos_de_ana()
+    check("debut" in codigos, "badge Debut con la primera cantada")
+    check("voz_de_oro" in codigos, "badge Voz de Oro con promedio 9+")
+    check("explorador" in codigos, f"badge Explorador con 3 generos distintos: {sorted(codigos)}")
+    check("maratonista" not in codigos, "todavia no es Maratonista con 3 canciones")
+
+    # Las dos que faltan ya son repeticiones (solo cargo 3): el conteo tiene
+    # que sumarlas igual, porque cantar dos veces la misma es cantar dos veces.
+    cantar(10)
+    cantar(10)
+    check("maratonista" in codigos_de_ana(), "badge Maratonista a las 5 cantadas, contando repeticiones")
+
+    noche = client.get(f"/api/ranking/noche/{sid}", headers=h(gid)).json()
+    fila = next(x for x in noche if x["nombre"].lower() == "ana")
+    check(fila["canciones_cantadas"] == 5 and fila["puntos"] == 50,
+          f"ranking de la noche: 5 canciones y 50 puntos ({fila['canciones_cantadas']}/{fila['puntos']})")
+    check({b["codigo"] for b in fila["badges"]} == codigos_de_ana(),
+          "el ranking de la noche muestra los mismos badges que el historico")
 
 
 def aleatorio_por_jugador() -> None:
