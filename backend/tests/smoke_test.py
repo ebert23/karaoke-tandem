@@ -325,8 +325,45 @@ def main() -> None:
     r = client.post("/api/retos", headers=h(g1["id"]),
                     json={"texto": "Reto de prueba", "categoria": "Creativo", "dificultad": "Fácil"})
     check(r.status_code == 200, "crear reto personalizado")
+    nuevo_reto = r.json()
     check(len(client.get("/api/retos", headers=h(g2["id"])).json()) == len(retos),
           "retos aislados por grupo: el grupo 2 sigue con los suyos")
+
+    r = client.post("/api/retos", headers=h(g1["id"]),
+                    json={"texto": "  reto DE prueba ", "categoria": "Normal", "dificultad": "Medio"})
+    check(r.status_code == 400, "el mismo reto no entra dos veces a la baraja")
+
+    # Cada categoria tiene que dar para una noche: con 2 retos, "Otro reto"
+    # devolvia siempre el mismo.
+    for categoria in ("Normal", "Picante", "Creativo", "Grupo"):
+        n = len(client.get("/api/retos", headers=h(g2["id"]), params={"categoria": categoria}).json())
+        check(n >= 6, f"la categoria {categoria} trae {n} retos por defecto")
+
+    # "Otro reto": el excluido no puede volver a salir mientras haya otros.
+    actual = client.get("/api/retos/aleatorio", headers=h(g2["id"]), params={"categoria": "Grupo"}).json()
+    repetidos = 0
+    for _ in range(8):
+        otro = client.get("/api/retos/aleatorio", headers=h(g2["id"]),
+                          params={"categoria": "Grupo", "excluir": actual["id"]}).json()
+        if otro["id"] == actual["id"]:
+            repetidos += 1
+    check(repetidos == 0, f"'Otro reto' nunca devuelve el que ya estaba en pantalla ({repetidos}/8)")
+
+    # Borrar: solo admins, y solo lo que existe.
+    r = delete(f"/api/retos/{nuevo_reto['id']}", headers=h(g1["id"]),
+               json={"id_usuario_actor": luis["id"]})
+    check(r.status_code == 403, "un no-admin no puede sacar retos de la baraja (403)")
+    r = delete(f"/api/retos/{nuevo_reto['id']}", headers=h(g1["id"]),
+               json={"id_usuario_actor": ana["id"]})
+    check(r.status_code == 204, "un admin saca el reto de la baraja")
+    ids = [x["id"] for x in client.get("/api/retos", headers=h(g1["id"])).json()]
+    check(nuevo_reto["id"] not in ids, "el reto borrado ya no esta en la baraja")
+    r = delete(f"/api/retos/{nuevo_reto['id']}", headers=h(g1["id"]),
+               json={"id_usuario_actor": ana["id"]})
+    check(r.status_code == 404, "borrar un reto que ya no existe da 404")
+    check(delete(f"/api/retos/{ids[0]}", headers=h(g2["id"]),
+                 json={"id_usuario_actor": ana["id"]}).status_code == 404,
+          "no se puede borrar un reto de otro grupo")
 
     # ---------------- Cierre + estadisticas ----------------
     r = client.post(f"/api/sesiones/{sid}/finalizar", headers=h(g1["id"]))

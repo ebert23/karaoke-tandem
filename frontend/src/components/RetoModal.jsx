@@ -87,7 +87,9 @@ export default function RetoModal({ participantes = [], onClose }) {
     setPidiendo(true);
     setCancionAsignada(Math.random() < PROB_CANCION_ASIGNADA ? elegirCancionAsignada() : null);
     try {
-      const r = await api.retoAleatorio();
+      // Se excluye el que ya está en pantalla: "Otro reto" tiene que traer
+      // otro de verdad.
+      const r = await api.retoAleatorio(undefined, reto?.id);
       setReto(r);
     } catch {
       setReto({ texto: "No se pudo cargar un reto — probá de nuevo en un rato.", dificultad: "", categoria: "Normal" });

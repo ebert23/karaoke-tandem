@@ -136,8 +136,11 @@ export const api = {
 
   // Retos
   retos: (categoria) => get(`/retos${qs({ categoria })}`),
-  retoAleatorio: (categoria) => get(`/retos/aleatorio${qs({ categoria })}`),
+  // excluir = id del reto que se está mostrando, para que "Otro reto" no
+  // devuelva el mismo cuando la categoría tiene pocos.
+  retoAleatorio: (categoria, excluir) => get(`/retos/aleatorio${qs({ categoria, excluir })}`),
   crearReto: (data) => post("/retos", data),
+  eliminarReto: (idReto, idUsuarioActor) => del(`/retos/${idReto}`, { id_usuario_actor: idUsuarioActor }),
 
   // Ranking / estadísticas
   rankingNoche: (idSesion) => get(`/ranking/noche/${idSesion}`),
