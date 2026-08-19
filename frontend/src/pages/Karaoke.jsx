@@ -437,8 +437,17 @@ export default function Karaoke() {
   const proximoCantante = sesion?.participantes?.length
     ? sesion.participantes[turnosJugados % sesion.participantes.length]
     : null;
-  const idsUsadas = new Set(turnos.map((t) => t.id_cancion));
-  const disponiblesParaCola = canciones.filter((c) => !idsUsadas.has(c.id));
+  // Para encolar solo estorba lo que ya está esperando turno: una canción que
+  // ya se cantó se puede volver a pedir, igual que el sorteo puede repetirla
+  // cuando se acabó el repertorio (mismo criterio que agregar_a_cola).
+  const idsEsperando = new Set(
+    turnos.filter((t) => t.estado === "En cola" || t.estado === "Pendiente").map((t) => t.id_cancion),
+  );
+  const disponiblesParaCola = canciones.filter((c) => !idsEsperando.has(c.id));
+  // Cuando ya no queda nada sin cantar, el sorteo empieza a repetir. Conviene
+  // decirlo: si no, parece que se rompió.
+  const idsYaSalidas = new Set(turnos.map((t) => t.id_cancion));
+  const quedanSinCantar = canciones.some((c) => !idsYaSalidas.has(c.id));
 
   async function agregarACola(idCancion, cantantes = []) {
     try {
@@ -495,11 +504,11 @@ export default function Karaoke() {
     try {
       await conAccionLocal(async () => {
         const t = await api.siguienteCancion(sesion.id_sesion, usuario.id, modo);
-        // Comparamos por id_cancion (no por turno): una canción en cola tiene
-        // turno=0 como placeholder hasta que "siguiente" la promueve y le
-        // asigna el turno real, así que filtrar por turno dejaría la fila
-        // vieja de la cola duplicada en el estado local.
-        setTurnos((prev) => [...prev.filter((x) => x.id_cancion !== t.id_cancion), t]);
+        // Se filtra por id de fila, no por id_cancion: una canción se puede
+        // repetir más tarde en la noche, y filtrar por canción borraba de la
+        // lista la vuelta anterior. Sirve igual para la fila que venía de la
+        // cola, porque "siguiente" la promueve manteniendo su id.
+        setTurnos((prev) => [...prev.filter((x) => x.id !== t.id), t]);
       });
     } catch (e) {
       push(e.message, "error");
@@ -648,9 +657,11 @@ export default function Karaoke() {
               ? cola.length > 0
                 ? `Sigue "${cola[0].cancion?.titulo}" (primera en la cola)`
                 : "La cola está vacía — agregá canciones o cambiá a Aleatorio"
-              : proximoCantante
+              : !proximoCantante
+              ? "Listo para el siguiente turno"
+              : quedanSinCantar
               ? `Modo aleatorio: le toca a ${proximoCantante} y se sortea entre las canciones que cargó`
-              : "Listo para el siguiente turno"}
+              : `Ya se cantaron todas: le toca a ${proximoCantante} y se repite alguna de las suyas`}
           </p>
           {esAdmin ? (
             <button
@@ -696,7 +707,7 @@ export default function Karaoke() {
         {cola.length > 0 && (
           <div className="flex flex-col gap-1.5 mb-2">
             {cola.map((t, i) => (
-              <div key={t.id_cancion} className="flex items-center gap-2 text-sm">
+              <div key={t.id} className="flex items-center gap-2 text-sm">
                 <span className="text-white/30 text-xs w-4">{i + 1}.</span>
                 <span className="truncate flex-1">
                   {t.cancion?.titulo} <span className="text-white/40">— {t.cancion?.artista}</span>
@@ -788,7 +799,7 @@ export default function Karaoke() {
           <p className="label mb-2">Playlist de la noche</p>
           <div className="flex flex-col gap-2">
             {[...resueltos].reverse().map((t) => (
-              <div key={`${t.turno}-${t.id_cancion}`} className="card p-3 flex items-center justify-between gap-3 text-sm">
+              <div key={t.id} className="card p-3 flex items-center justify-between gap-3 text-sm">
                 <div className="min-w-0">
                   <p className="font-medium truncate">
                     #{t.turno} {t.cancion?.titulo} <span className="text-white/40">— {formatCantantes(t.cantada_por)}</span>

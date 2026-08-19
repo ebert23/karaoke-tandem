@@ -70,7 +70,7 @@ function SesionItem({ sesion, onFinalizada }) {
             <p className="text-white/40 text-sm">No se cantaron canciones en esta sesión.</p>
           ) : (
             cantadas.map((t) => (
-              <div key={t.turno} className="flex items-center justify-between text-sm">
+              <div key={t.id} className="flex items-center justify-between text-sm">
                 <span className="truncate">
                   {t.cancion?.titulo} — <span className="text-white/40">{formatCantantes(t.cantada_por)}</span>
                 </span>

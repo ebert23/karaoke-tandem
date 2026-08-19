@@ -143,7 +143,8 @@ function TVGrupo() {
     if (!sesion) return;
     try {
       const t = await api.siguienteCancion(sesion.id_sesion);
-      setTurnos((prev) => [...prev.filter((x) => x.id_cancion !== t.id_cancion), t]);
+      // Por id de fila: la misma canción puede repetirse más tarde en la noche.
+      setTurnos((prev) => [...prev.filter((x) => x.id !== t.id), t]);
     } catch {
       /* sin más canciones disponibles o error puntual — la pantalla de espera ya lo refleja */
     }
@@ -239,7 +240,7 @@ function TVGrupo() {
         <div className="border-t border-white/10 pt-3 flex items-center gap-4 overflow-x-auto shrink-0">
           <span className="text-white/40 text-xs uppercase tracking-widest shrink-0">A seguir</span>
           {cola.map((t, i) => (
-            <span key={t.id_cancion} className="chip shrink-0 !text-sm">
+            <span key={t.id} className="chip shrink-0 !text-sm">
               {i + 1}. {t.cancion?.titulo}
             </span>
           ))}

@@ -105,6 +105,10 @@ def quitar_participante(id_grupo: str, id_sesion: str, nombre: str) -> None:
 
 def _turno_dict(row: dict, cancion: dict | None) -> dict:
     return {
+        # id de la fila: desde que una canción se puede repetir en la misma
+        # noche, id_cancion ya no alcanza para distinguir un turno de otro
+        # (el front lo necesita para no pisar la vuelta anterior en la lista).
+        "id": row["id"],
         "id_sesion": row["id_sesion"],
         "id_cancion": row["id_cancion"],
         "turno": row["turno"],
@@ -133,10 +137,17 @@ def agregar_a_cola(id_grupo: str, id_sesion: str, id_cancion: str, cantantes: li
     if sesion_row["estado"] != "Activa":
         raise ValueError("La sesión no está activa")
 
-    turnos_previos = db.fetch_all("SELECT id_cancion, estado FROM canciones_sesion WHERE id_sesion = %s", (id_sesion,))
-    ids_usadas = {t["id_cancion"] for t in turnos_previos if t["estado"] in ("Pendiente", "Cantada", "En cola")}
-    if id_cancion in ids_usadas:
-        raise ValueError("Esa canción ya está en la sesión (cantada, pendiente o en cola)")
+    # Solo se bloquea lo que ya está esperando: una canción cantada se puede
+    # volver a encolar, igual que el sorteo puede repetirla cuando se acabó el
+    # repertorio. Lo que no tiene sentido es tenerla dos veces en la misma
+    # cola, porque no se sabría cuál se está moviendo o quitando.
+    en_juego = db.fetch_one(
+        "SELECT id FROM canciones_sesion WHERE id_sesion = %s AND id_cancion = %s "
+        "AND estado IN ('Pendiente', 'En cola') LIMIT 1",
+        (id_sesion, id_cancion),
+    )
+    if en_juego is not None:
+        raise ValueError("Esa canción ya está esperando su turno en esta sesión")
 
     # Si se eligen cantantes a mano (dueto/grupal o "quiero que cante X"), se
     # guardan ya en la fila de cola; si no, queda vacío y "siguiente" asigna
@@ -202,6 +213,42 @@ def mover_en_cola(id_grupo: str, id_sesion: str, id_cancion: str, id_usuario_act
     return _turnos_to_out(filas_cola)
 
 
+def _sortear(todas: list[dict], ids_usadas: set[str], turnos_previos: list[dict], cantante: str) -> dict:
+    """Elige la canción del turno. Nunca devuelve vacío mientras haya catálogo.
+
+    Va bajando por niveles, y se queda en el primero que tenga algo:
+
+    1. las que cargó quien canta y todavía no salieron — el caso normal;
+    2. las que cargó otro y todavía no salieron — para el que anotó menos
+       canciones que el resto y ya se quedó sin propias;
+    3. repetir alguna de las suyas;
+    4. repetir cualquiera.
+
+    Los niveles 3 y 4 existen porque la noche no puede terminarse sola: cuando
+    se acaba el repertorio la gente sigue queriendo cantar, y repetir la que
+    salió bien es exactamente lo que pasa en un karaoke de verdad. Dentro del
+    nivel de repetición se sortea entre las MENOS cantadas de la noche, así el
+    repertorio rota en vez de insistir con la misma.
+    """
+    frescas = [c for c in todas if c["id"] not in ids_usadas]
+    propias = [c for c in frescas if _mismo_nombre(c["agregado_por"], cantante)]
+    if propias:
+        return random.choice(propias)
+    if frescas:
+        return random.choice(frescas)
+
+    veces = {}
+    for t in turnos_previos:
+        veces[t["id_cancion"]] = veces.get(t["id_cancion"], 0) + 1
+
+    def menos_repetidas(candidatas: list[dict]) -> list[dict]:
+        minimo = min(veces.get(c["id"], 0) for c in candidatas)
+        return [c for c in candidatas if veces.get(c["id"], 0) == minimo]
+
+    suyas = [c for c in todas if _mismo_nombre(c["agregado_por"], cantante)]
+    return random.choice(menos_repetidas(suyas or todas))
+
+
 def siguiente_cancion(id_grupo: str, id_sesion: str, id_usuario_actor: str, modo: str | None = None) -> dict:
     """Arma el próximo turno.
 
@@ -209,8 +256,9 @@ def siguiente_cancion(id_grupo: str, id_sesion: str, id_usuario_actor: str, modo
     modo="aleatorio": sortea entre las canciones que cargó el cantante al que
     le toca este turno, IGNORANDO la cola — lo que está encolado queda
     reservado para cuando se vuelva al modo cola, así que tampoco puede salir
-    sorteado. Si a esa persona ya no le quedan propias sin cantar, recién ahí
-    se sortea del resto del catálogo.
+    sorteado. Cuando esa persona ya no tiene propias sin cantar (o cuando ya
+    no queda nada sin cantar en todo el grupo) el sorteo baja de nivel y
+    llega a repetir; ver _sortear.
     modo=None: comportamiento histórico (primero la cola, y si está vacía
     sortea). Es lo que mandan los clientes viejos que todavía tienen el
     bundle anterior cacheado, así que no se les puede romper.
@@ -272,21 +320,14 @@ def siguiente_cancion(id_grupo: str, id_sesion: str, id_usuario_actor: str, modo
         cola_row.update({"turno": nuevo_turno, "cantada_por": cantante_final, "estado": "Pendiente"})
         return _turno_to_out(cola_row)
 
-    # Modo aleatorio: 'En cola' sigue contando como usada, así lo que alguien
-    # dejó encolado no sale sorteado y queda esperando su turno en la cola.
+    # Modo aleatorio: 'En cola' cuenta como usada, así lo que alguien dejó
+    # encolado no sale sorteado y queda esperando su turno en la cola.
     ids_usadas = {t["id_cancion"] for t in turnos_previos if t["estado"] in ("Pendiente", "Cantada", "En cola")}
     todas = canciones_svc.listar(id_grupo)
-    disponibles = [c for c in todas if c["id"] not in ids_usadas]
-    if not disponibles:
-        raise ValueError("No quedan canciones disponibles en la lista")
+    if not todas:
+        raise ValueError("No hay canciones en la lista: agregá alguna para poder sortear")
 
-    # A cada quien le tocan SUS canciones: el sorteo se hace entre las que
-    # cargó el cantante de este turno, no entre todo el catálogo del grupo.
-    # Es lo que la gente espera — uno anota las que se sabe, no las del otro.
-    propias = [c for c in disponibles if _mismo_nombre(c["agregado_por"], cantante)]
-    # Si ya cantó todas las suyas, antes de cortar la noche se sortea del
-    # resto: quedarse sin canción propia no puede significar "no cantás más".
-    elegida = random.choice(propias or disponibles)
+    elegida = _sortear(todas, ids_usadas, turnos_previos, cantante)
     nuevo_turno = len(turnos_previos) + 1
     row = db.fetch_one(
         "INSERT INTO canciones_sesion (id_sesion, id_grupo, id_cancion, orden, turno, cantada_por, puntuacion, estado) "
@@ -309,8 +350,18 @@ def _turno_pendiente(id_sesion: str, id_cancion: str) -> dict:
 
 
 def _fila_turno(id_sesion: str, id_cancion: str) -> dict | None:
+    """La fila VIGENTE de esa canción en la sesión, no la primera.
+
+    Desde que el sorteo puede repetir una canción ya cantada, una misma
+    id_cancion tiene varias filas en la misma noche. Las rutas de votar,
+    marcar cantada y saltar la identifican por id_cancion, así que tienen que
+    caer siempre en la interpretación en curso: primero la que esté Pendiente
+    o En cola, y si no, la más reciente. Con "la primera" los votos de la
+    segunda vuelta se habrían sumado al turno viejo.
+    """
     return db.fetch_one(
-        "SELECT * FROM canciones_sesion WHERE id_sesion = %s AND id_cancion = %s ORDER BY id ASC LIMIT 1",
+        "SELECT * FROM canciones_sesion WHERE id_sesion = %s AND id_cancion = %s "
+        "ORDER BY (estado IN ('Pendiente', 'En cola')) DESC, id DESC LIMIT 1",
         (id_sesion, id_cancion),
     )
 

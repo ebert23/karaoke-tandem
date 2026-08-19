@@ -364,6 +364,39 @@ def aleatorio_por_jugador() -> None:
     check(len(prestadas) == 1 and prestadas[0]["cancion"] is not None,
           "si al que le toca no le quedan canciones propias, igual se le sortea una del resto")
 
+    # ---- Se acabo el repertorio: el juego sigue, repitiendo ----
+    # Van 14 turnos sobre 18 canciones. Con 4 turnos mas no queda nada sin
+    # cantar, y a partir de ahi TODO lo que salga es una repeticion.
+    for _ in range(4):
+        un_turno()
+    repeticiones = [un_turno() for _ in range(6)]
+    check(all(t["cancion"] is not None for t in repeticiones),
+          "sin canciones nuevas el sorteo sigue devolviendo turnos en vez de cortar la noche")
+    check(all(t["id_cancion"] in de_cada[t["cantada_por"]] for t in repeticiones),
+          "al repetir tambien le toca a cada uno lo suyo")
+    check(len({t["id"] for t in repeticiones}) == 6,
+          "cada repeticion es un turno propio, no una reescritura del anterior")
+
+    # Con 6 canciones cada uno y 3 repeticiones por cabeza, si el sorteo
+    # eligiera a ciegas es facil que insista con la misma: repartir entre las
+    # menos cantadas tiene que dar 3 canciones distintas.
+    rep_ana = [t["id_cancion"] for t in repeticiones if t["cantada_por"] == "Ana"]
+    check(len(set(rep_ana)) == len(rep_ana),
+          f"las repeticiones rotan en vez de insistir con la misma cancion: {len(set(rep_ana))}/{len(rep_ana)}")
+
+    # La lista completa tiene que conservar las dos vueltas de cada canción.
+    detalle = client.get(f"/api/sesiones/{sid}/detalle", headers=h(gid)).json()
+    check(len(detalle) == 24, f"la playlist guarda cada interpretacion por separado ({len(detalle)} turnos)")
+    check(len({t["id"] for t in detalle}) == 24, "cada fila de la playlist tiene su propio id")
+
+    # Encolar a mano una ya cantada tambien tiene que poder; lo unico que se
+    # rechaza es tenerla dos veces esperando al mismo tiempo.
+    ya_cantada = de_ana[0]
+    r = client.post(f"/api/sesiones/{sid}/cola", headers=h(gid), json={"id_cancion": ya_cantada, "cantantes": []})
+    check(r.status_code == 200, "se puede volver a encolar una cancion que ya se canto")
+    r = client.post(f"/api/sesiones/{sid}/cola", headers=h(gid), json={"id_cancion": ya_cantada, "cantantes": []})
+    check(r.status_code == 400, "pero no dos veces en la misma cola")
+
 
 def salon() -> None:
     """Modo salón: mesas con QR, rotación entre mesas y vista del DJ.

@@ -118,6 +118,9 @@ class MarcarCantadaRequest(BaseModel):
 
 
 class CancionSesionOut(BaseModel):
+    # id de la fila en canciones_sesion. Identifica UNA interpretación: la
+    # misma canción puede volver a salir sorteada más tarde en la noche.
+    id: int
     id_sesion: str
     id_cancion: str
     turno: int
