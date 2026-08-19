@@ -568,9 +568,12 @@ export default function Karaoke() {
     <>
       {mostrarReto && <RetoModal participantes={sesion.participantes} onClose={() => setMostrarReto(false)} />}
       <div className="flex flex-col gap-4 max-w-xl mx-auto">
-      <div className="flex items-center justify-between">
+      {/* flex-wrap en las dos filas: son cuatro botones que en un celular no
+          entran en la misma línea que el título, y sin wrap empujaban la
+          página entera hacia la derecha. */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="title-glow text-2xl">Karaoke en vivo</h2>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <a href="#/tv" target="_blank" rel="noreferrer" className="btn-ghost !text-xs !py-1.5">
             📺 Modo TV
           </a>

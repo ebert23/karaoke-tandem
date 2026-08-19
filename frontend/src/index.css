@@ -18,6 +18,16 @@ body {
   background-attachment: fixed;
 }
 
+/* Red de seguridad: acá todos entran desde el celular, y una pantalla que se
+   corre para el costado deja botones fuera de vista sin que nadie entienda por
+   qué. Esto NO reemplaza arreglar el desborde donde ocurre — solo evita que un
+   título largo inesperado rompa la navegación de toda la app.
+   "clip" y no "hidden" a propósito: hidden convierte a #root en contenedor de
+   scroll y le rompe el `sticky top-0` del encabezado de la mesa. */
+#root {
+  overflow-x: clip;
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;

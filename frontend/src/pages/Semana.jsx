@@ -42,7 +42,7 @@ function EditarCancionForm({ cancion, onGuardar, onCancelar, guardando }) {
   }
 
   return (
-    <form onSubmit={submit} className="card p-4 grid sm:grid-cols-2 gap-3">
+    <form onSubmit={submit} className="card p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
       <div>
         <label className="label">Título</label>
         <input className="input" value={form.titulo} onChange={(e) => setForm({ ...form, titulo: e.target.value })} maxLength={200} required />
@@ -234,7 +234,7 @@ function BuscadorYoutube({ onElegir }) {
               type="button"
               key={r.link_youtube}
               onClick={() => onElegir(r)}
-              className="flex items-center gap-2.5 text-left p-1.5 rounded-lg hover:bg-white/5 transition-colors"
+              className="flex items-center gap-2.5 text-left p-1.5 rounded-lg hover:bg-white/5 transition-colors min-w-0"
             >
               {r.miniatura && <img src={r.miniatura} alt="" className="w-10 h-10 rounded-md object-cover shrink-0" />}
               <div className="min-w-0">
@@ -410,7 +410,12 @@ export default function Semana() {
       </div>
 
       {showForm && (
-        <form onSubmit={agregar} className="card p-4 grid sm:grid-cols-2 gap-3">
+        // grid-cols-1 explícito, no solo "grid": sin él la única columna es
+        // "auto" y crece hasta el min-content del hijo más ancho — un título
+        // largo de YouTube estiraba el formulario más allá de la pantalla y
+        // dejaba Guardar fuera de vista. grid-cols-1 usa minmax(0,1fr), que
+        // no permite que un hijo empuje la columna.
+        <form onSubmit={agregar} className="card p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
           <BuscadorYoutube
             onElegir={(r) => {
               const { titulo, artista, link_youtube } = parseResultadoYoutube(r);
