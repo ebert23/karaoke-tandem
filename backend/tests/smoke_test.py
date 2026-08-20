@@ -188,6 +188,65 @@ def main() -> None:
     client.request("DELETE", f"/api/canciones/{base['id']}", headers=h(g1["id"]),
                    json={"id_usuario": ana["id"]})
 
+    # ---------------- Importar catalogo desde CSV ----------------
+    gimp = crear_grupo("Smoke Importar", "Ana")["id"]
+    ana_imp = client.post("/api/usuarios", headers=h(gimp), json={"nombre": "Ana"}).json()
+    luis_imp = client.post("/api/usuarios", headers=h(gimp), json={"nombre": "Luis"}).json()
+
+    # Punto y coma y encabezados con tilde: es lo que exporta Excel en espanol.
+    csv_local = (
+        "Título;Artista;Género;Link YouTube\n"
+        "Mientes Tan Bien;Sin Bandera;Balada;https://youtu.be/aBcDeFgHiJ1\n"
+        "Colgando En Tus Manos;Carlos Baute;Pop;\n"
+        ";Artista sin titulo;Rock;\n"
+        "Titulo sin artista;;Pop;\n"
+        "MIENTES TAN BIEN (Video Oficial);sin bandera;Balada;\n"
+        "Tema Sin Genero;Alguien;;\n"
+    )
+
+    r = client.post("/api/canciones/importar", headers=h(gimp),
+                    json={"contenido": csv_local, "id_usuario_actor": luis_imp["id"]})
+    check(r.status_code == 403, "un no-admin no puede importar el catalogo (403)")
+
+    r = client.post("/api/canciones/importar", headers=h(gimp),
+                    json={"contenido": csv_local, "id_usuario_actor": ana_imp["id"]})
+    check(r.status_code == 200, "la vista previa responde 200")
+    previa = r.json()
+    check(previa["total_filas"] == 6 and previa["listas"] == 3,
+          f"vista previa: 6 filas, 3 entran ({previa['total_filas']}/{previa['listas']})")
+    check(previa["total_errores"] == 2 and {f["fila"] for f in previa["errores"]} == {4, 5},
+          f"marca las filas sin titulo y sin artista con su numero de linea: {previa['errores']}")
+    check(previa["total_repetidas"] == 1 and previa["repetidas"][0]["fila"] == 6,
+          "el propio archivo no puede meter la misma cancion dos veces")
+    check(previa["importadas"] == 0, "la vista previa no escribe nada")
+    check(len(client.get("/api/canciones", headers=h(gimp)).json()) == 0,
+          "y el catalogo sigue vacio despues de la vista previa")
+    check(any(c["genero"] == "Otro" for c in previa["muestra"]),
+          "una fila sin genero entra con 'Otro' en vez de rechazarse")
+
+    r = client.post("/api/canciones/importar", headers=h(gimp),
+                    json={"contenido": csv_local, "id_usuario_actor": ana_imp["id"], "confirmar": True})
+    check(r.json()["importadas"] == 3, "confirmar importa las 3 buenas")
+    catalogo = client.get("/api/canciones", headers=h(gimp)).json()
+    check(len(catalogo) == 3, f"el catalogo quedo con 3 canciones ({len(catalogo)})")
+
+    r = client.post("/api/canciones/importar", headers=h(gimp),
+                    json={"contenido": csv_local, "id_usuario_actor": ana_imp["id"], "confirmar": True})
+    check(r.json()["importadas"] == 0 and r.json()["total_repetidas"] == 4,
+          "importar el mismo archivo dos veces no duplica nada")
+
+    # El CSV que exporta la app se tiene que poder volver a importar tal cual.
+    exportado = client.get("/api/canciones/export.csv", headers=h(gimp)).text
+    r = client.post("/api/canciones/importar", headers=h(gimp),
+                    json={"contenido": exportado, "id_usuario_actor": ana_imp["id"]})
+    check(r.status_code == 200 and r.json()["total_repetidas"] == 3 and r.json()["listas"] == 0,
+          "el CSV que exporta la app se relee y reconoce sus propias canciones")
+
+    r = client.post("/api/canciones/importar", headers=h(gimp),
+                    json={"contenido": "una,lista,cualquiera\n1,2,3", "id_usuario_actor": ana_imp["id"]})
+    check(r.status_code == 400 and "Título y Artista" in r.json()["detail"],
+          "un archivo sin las columnas minimas avisa cuales encontro")
+
     # ---------------- Sesiones: flujo completo ----------------
     ses = client.post("/api/sesiones", headers=h(g1["id"]), json={"participantes": ["Ana", "Luis"]}).json()
     check(ses["estado"] == "Activa" and ses["turno_actual"] == 0, "crear sesion activa en turno 0")

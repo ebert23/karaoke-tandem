@@ -303,6 +303,174 @@ def sugerencias(genero: str | None = None) -> list[dict]:
     return resultado
 
 
+# Nombres de columna que se aceptan al importar, ya normalizados (minúsculas y
+# sin tildes). Un local arma su lista en Excel con los encabezados que se le
+# ocurren, y rechazarle el archivo por decir "Interprete" en vez de "Artista"
+# es la clase de fricción que hace que no vuelva a intentarlo.
+_ALIAS_COLUMNAS = {
+    "titulo": "titulo", "title": "titulo", "cancion": "titulo", "tema": "titulo",
+    "nombre": "titulo", "nombre de la cancion": "titulo",
+    "artista": "artista", "artist": "artista", "interprete": "artista",
+    "cantante": "artista", "autor": "artista", "grupo": "artista",
+    "genero": "genero", "genre": "genero", "estilo": "genero", "categoria": "genero",
+    "link youtube": "link_youtube", "link_youtube": "link_youtube", "link": "link_youtube",
+    "youtube": "link_youtube", "url": "link_youtube", "video": "link_youtube",
+    "enlace": "link_youtube",
+}
+
+GENERO_POR_DEFECTO = "Otro"
+MAX_FILAS_IMPORTACION = 5000
+
+
+def _normalizar_encabezado(s: str) -> str:
+    s = unicodedata.normalize("NFKD", (s or "").strip().lower())
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    return re.sub(r"\s+", " ", s.replace("_", " ")).strip()
+
+
+def _mapear_columnas(encabezados: list[str]) -> dict[str, int]:
+    """Posición de cada campo conocido dentro de la fila. Ignora el resto.
+
+    Así el CSV que exporta la app (10 columnas, con id y contadores) se puede
+    volver a importar tal cual: las columnas que no se reconocen se descartan
+    en vez de romper la lectura.
+    """
+    mapa: dict[str, int] = {}
+    for i, bruto in enumerate(encabezados):
+        campo = _ALIAS_COLUMNAS.get(_normalizar_encabezado(bruto))
+        if campo and campo not in mapa:
+            mapa[campo] = i
+    return mapa
+
+
+def _indice_duplicados(id_grupo: str) -> tuple[set[str], set[str]]:
+    """Claves y videos del catálogo, en memoria y de una sola consulta.
+
+    Importar 500 filas llamando a buscar_duplicada por cada una serían 500
+    lecturas de toda la tabla; acá se lee una vez y se compara en memoria.
+    """
+    claves: set[str] = set()
+    videos: set[str] = set()
+    for row in db.fetch_all("SELECT titulo, artista, link_youtube FROM canciones WHERE id_grupo = %s", (id_grupo,)):
+        claves.add(_clave(row["titulo"], row["artista"]))
+        vid = _video_id(row["link_youtube"])
+        if vid:
+            videos.add(vid)
+    return claves, videos
+
+
+def requiere_admin(id_grupo: str, id_usuario: str) -> None:
+    """Importar toca el catálogo entero de una, así que se pide admin.
+
+    Distinto de _verificar_permiso, que mira de quién es UNA canción: acá no
+    hay una canción todavía.
+    """
+    grupo = grupos_svc.get_por_id(id_grupo)
+    if grupo is None:
+        raise ValueError("Grupo no encontrado")
+    if id_usuario not in (grupo["admins"] or []):
+        raise PermissionError("Solo un admin del grupo puede importar el catálogo")
+
+
+def importar_csv(id_grupo: str, contenido: str, confirmar: bool = False) -> dict:
+    """Lee un CSV y agrega las canciones que falten. Devuelve el resumen.
+
+    Con confirmar=False no escribe nada: sirve para mostrar qué va a pasar
+    antes de tocar el catálogo, que con 500 filas es la diferencia entre
+    confiar y no animarse a apretar el botón.
+
+    Una fila mala no aborta el archivo: se anota con su número de línea y el
+    resto entra igual.
+    """
+    texto = contenido.lstrip("﻿")
+    if not texto.strip():
+        raise ValueError("El archivo está vacío")
+
+    # Excel en español exporta con punto y coma, no con coma.
+    try:
+        delimitador = csv.Sniffer().sniff(texto[:4096], delimiters=",;\t|").delimiter
+    except csv.Error:
+        delimitador = ","
+
+    filas = list(csv.reader(io.StringIO(texto), delimiter=delimitador))
+    filas = [f for f in filas if any((c or "").strip() for c in f)]
+    if not filas:
+        raise ValueError("El archivo está vacío")
+
+    columnas = _mapear_columnas(filas[0])
+    if "titulo" not in columnas or "artista" not in columnas:
+        encontradas = ", ".join(c.strip() for c in filas[0] if c.strip()) or "(ninguna)"
+        raise ValueError(
+            "El archivo necesita una fila de encabezados con al menos las columnas "
+            f"Título y Artista. Se encontraron: {encontradas}"
+        )
+
+    cuerpo = filas[1:]
+    if len(cuerpo) > MAX_FILAS_IMPORTACION:
+        raise ValueError(
+            f"El archivo tiene {len(cuerpo)} filas y el máximo es {MAX_FILAS_IMPORTACION}. "
+            "Partilo en varios archivos."
+        )
+
+    claves, videos = _indice_duplicados(id_grupo)
+    nuevas: list[dict] = []
+    repetidas: list[dict] = []
+    errores: list[dict] = []
+
+    def celda(fila: list[str], campo: str) -> str:
+        i = columnas.get(campo)
+        return (fila[i] or "").strip() if i is not None and i < len(fila) else ""
+
+    for n, fila in enumerate(cuerpo, start=2):  # 1 es el encabezado
+        titulo = celda(fila, "titulo")
+        artista = celda(fila, "artista")
+        if not titulo:
+            errores.append({"fila": n, "titulo": titulo, "artista": artista, "motivo": "Falta el título"})
+            continue
+        if not artista:
+            errores.append({"fila": n, "titulo": titulo, "artista": artista, "motivo": "Falta el artista"})
+            continue
+
+        genero = celda(fila, "genero") or GENERO_POR_DEFECTO
+        link = celda(fila, "link_youtube")
+        clave = _clave(titulo, artista)
+        vid = _video_id(link)
+
+        if clave in claves or (vid and vid in videos):
+            repetidas.append({"fila": n, "titulo": titulo, "artista": artista, "motivo": "Ya está en la lista"})
+            continue
+
+        # Se marcan ya como vistas para que el propio archivo no meta la misma
+        # canción dos veces.
+        claves.add(clave)
+        if vid:
+            videos.add(vid)
+        nuevas.append({"titulo": titulo[:200], "artista": artista[:200],
+                       "genero": genero[:60], "link_youtube": link})
+
+    importadas = 0
+    if confirmar and nuevas:
+        fecha = now_iso()
+        db.execute_many(
+            "INSERT INTO canciones (id, id_grupo, titulo, artista, genero, link_youtube, "
+            "agregado_por, fecha_agregado, votos, veces_cantada) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 0, 0)",
+            [(new_id("C"), id_grupo, c["titulo"], c["artista"], c["genero"], c["link_youtube"],
+              "Importadas", fecha) for c in nuevas],
+        )
+        importadas = len(nuevas)
+
+    return {
+        "total_filas": len(cuerpo),
+        "listas": len(nuevas),
+        "importadas": importadas,
+        "repetidas": repetidas[:50],
+        "total_repetidas": len(repetidas),
+        "errores": errores[:50],
+        "total_errores": len(errores),
+        "muestra": nuevas[:5],
+    }
+
+
 def exportar_csv(id_grupo: str) -> str:
     rows = db.fetch_all("SELECT * FROM canciones WHERE id_grupo = %s", (id_grupo,))
     buf = io.StringIO()

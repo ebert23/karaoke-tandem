@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { IconEdit, IconHeart, IconPlus, IconSearch, IconSparkles, IconStar, IconTrash } from "../components/Icons.jsx";
 import { useGroup } from "../lib/GroupContext.jsx";
 import { useIdentity } from "../lib/IdentityContext.jsx";
@@ -288,6 +288,136 @@ function SugerenciasGenero({ genero, onElegir }) {
   );
 }
 
+// Lee el archivo resolviendo la codificación: Excel en español todavía
+// exporta en Windows-1252 muy seguido, y leerlo como UTF-8 deja "Corazón"
+// convertido en "Coraz?n" en todo el catálogo.
+async function leerCsv(archivo) {
+  const buffer = await archivo.arrayBuffer();
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(buffer);
+  } catch {
+    return new TextDecoder("windows-1252").decode(buffer);
+  }
+}
+
+function ImportarCatalogo({ idUsuario, onImportado }) {
+  const { push } = useToast();
+  const [contenido, setContenido] = useState("");
+  const [nombreArchivo, setNombreArchivo] = useState("");
+  const [previa, setPrevia] = useState(null);
+  const [ocupado, setOcupado] = useState(false);
+  const inputRef = useRef(null);
+
+  function cerrar() {
+    setContenido("");
+    setNombreArchivo("");
+    setPrevia(null);
+    if (inputRef.current) inputRef.current.value = "";
+  }
+
+  async function elegirArchivo(e) {
+    const archivo = e.target.files?.[0];
+    if (!archivo) return;
+    setOcupado(true);
+    try {
+      const texto = await leerCsv(archivo);
+      setContenido(texto);
+      setNombreArchivo(archivo.name);
+      setPrevia(await api.importarCanciones(texto, idUsuario, false));
+    } catch (err) {
+      push(err.message, "error");
+      cerrar();
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  async function confirmar() {
+    setOcupado(true);
+    try {
+      const r = await api.importarCanciones(contenido, idUsuario, true);
+      push(`Se agregaron ${r.importadas} canciones al catálogo 🎶`, "success");
+      cerrar();
+      onImportado();
+    } catch (err) {
+      push(err.message, "error");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  return (
+    <>
+      <input ref={inputRef} type="file" accept=".csv,text/csv" onChange={elegirArchivo} className="hidden" />
+      <button onClick={() => inputRef.current?.click()} disabled={ocupado} className="btn-ghost">
+        Importar
+      </button>
+
+      {previa && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
+          <div className="card p-5 w-full max-w-sm max-h-[85vh] overflow-y-auto">
+            <h3 className="font-display font-bold text-lg">Importar catálogo</h3>
+            <p className="text-white/40 text-xs mt-0.5 break-all">{nombreArchivo}</p>
+
+            <div className="grid grid-cols-3 gap-2 mt-4 text-center">
+              <div className="rounded-xl bg-white/5 border border-white/10 p-2">
+                <p className="font-display font-extrabold text-xl text-neon-cyan">{previa.listas}</p>
+                <p className="text-[11px] text-white/50 leading-tight">entran</p>
+              </div>
+              <div className="rounded-xl bg-white/5 border border-white/10 p-2">
+                <p className="font-display font-extrabold text-xl text-amber-300">{previa.total_repetidas}</p>
+                <p className="text-[11px] text-white/50 leading-tight">ya estaban</p>
+              </div>
+              <div className="rounded-xl bg-white/5 border border-white/10 p-2">
+                <p className="font-display font-extrabold text-xl text-red-300">{previa.total_errores}</p>
+                <p className="text-[11px] text-white/50 leading-tight">con error</p>
+              </div>
+            </div>
+            <p className="text-white/40 text-xs mt-2">{previa.total_filas} filas leídas</p>
+
+            {previa.muestra.length > 0 && (
+              <div className="mt-4">
+                <p className="label">Primeras que entran</p>
+                <ul className="space-y-1">
+                  {previa.muestra.map((c, i) => (
+                    <li key={i} className="text-sm truncate">
+                      {c.titulo} <span className="text-white/40">— {c.artista} · {c.genero}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {previa.errores.length > 0 && (
+              <div className="mt-4">
+                <p className="label">Filas con problemas</p>
+                <ul className="space-y-1">
+                  {previa.errores.slice(0, 8).map((f) => (
+                    <li key={f.fila} className="text-sm text-white/60 truncate">
+                      <span className="text-red-300">Fila {f.fila}</span> · {f.motivo}
+                      {f.titulo || f.artista ? ` (${f.titulo || f.artista})` : ""}
+                    </li>
+                  ))}
+                </ul>
+                {previa.total_errores > 8 && (
+                  <p className="text-white/30 text-xs mt-1">y {previa.total_errores - 8} más</p>
+                )}
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-4">
+              <button onClick={confirmar} disabled={ocupado || previa.listas === 0} className="btn-primary flex-1">
+                {ocupado ? "Importando…" : `Importar ${previa.listas}`}
+              </button>
+              <button onClick={cerrar} className="btn-ghost">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function Semana() {
   const { usuario } = useIdentity();
   const { grupo } = useGroup();
@@ -429,6 +559,7 @@ export default function Semana() {
           <a href={api.exportCsvUrl()} className="btn-ghost" download>
             CSV
           </a>
+          {esAdmin && <ImportarCatalogo idUsuario={usuario.id} onImportado={cargar} />}
           <button onClick={() => setShowForm((s) => !s)} className="btn-primary">
             <IconPlus /> Agregar
           </button>

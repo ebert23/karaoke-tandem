@@ -83,6 +83,42 @@ class VotoRequest(BaseModel):
     id_usuario: str
 
 
+class ImportarCancionesRequest(BaseModel):
+    # El CSV viaja como texto en el body y no como archivo subido: así el
+    # backend no necesita python-multipart, y el navegador ya tuvo que leer el
+    # archivo igual para poder resolverle la codificación (Excel exporta en
+    # Windows-1252 más seguido de lo que uno quisiera).
+    contenido: str = Field(min_length=1, max_length=2_000_000)
+    id_usuario_actor: str
+    # False = solo mirar qué pasaría. True = escribir.
+    confirmar: bool = False
+
+
+class FilaImportacionOut(BaseModel):
+    fila: int
+    titulo: str = ""
+    artista: str = ""
+    motivo: str = ""
+
+
+class CancionPreviaOut(BaseModel):
+    titulo: str
+    artista: str
+    genero: str
+    link_youtube: str = ""
+
+
+class ImportacionOut(BaseModel):
+    total_filas: int
+    listas: int
+    importadas: int
+    repetidas: list[FilaImportacionOut]
+    total_repetidas: int
+    errores: list[FilaImportacionOut]
+    total_errores: int
+    muestra: list[CancionPreviaOut]
+
+
 # --- Usuarios ---
 class UsuarioCreate(BaseModel):
     nombre: str = Field(min_length=1, max_length=80)

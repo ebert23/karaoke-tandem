@@ -3,7 +3,16 @@ sugerencias, búsqueda en YouTube y export CSV."""
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..deps import get_grupo_id
-from ..schemas import CancionCreate, CancionOut, CancionUpdate, FavoritoRequest, SugerenciaOut, VotoRequest
+from ..schemas import (
+    CancionCreate,
+    CancionOut,
+    CancionUpdate,
+    FavoritoRequest,
+    ImportacionOut,
+    ImportarCancionesRequest,
+    SugerenciaOut,
+    VotoRequest,
+)
 from ..services import canciones as svc
 
 router = APIRouter(prefix="/api/canciones", tags=["canciones"])
@@ -46,6 +55,23 @@ def duplicada(
     rechazo del alta no pueden decir cosas distintas.
     """
     return svc.duplicada(id_grupo, titulo, artista, link_youtube, excluir_id=excluir_id)
+
+
+@router.post("/importar", response_model=ImportacionOut)
+def importar(data: ImportarCancionesRequest, id_grupo: str = Depends(get_grupo_id)):
+    """Carga un catálogo entero desde un CSV. Solo admins.
+
+    Con confirmar=false devuelve el mismo resumen sin escribir nada, para que
+    el dueño vea cuántas entran, cuántas ya tenía y qué filas están mal antes
+    de tocar su catálogo.
+    """
+    try:
+        svc.requiere_admin(id_grupo, data.id_usuario_actor)
+        return svc.importar_csv(id_grupo, data.contenido, confirmar=data.confirmar)
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @router.get("/export.csv")

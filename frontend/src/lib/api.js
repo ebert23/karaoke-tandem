@@ -113,6 +113,9 @@ export const api = {
   cancionDuplicada: (params) => get(`/canciones/duplicada${qs(params)}`),
   buscarYoutube: (q) => get(`/youtube/buscar${qs({ q })}`),
   exportCsvUrl: () => `${BASE}/canciones/export.csv`,
+  // confirmar=false devuelve el mismo resumen sin escribir nada.
+  importarCanciones: (contenido, idUsuarioActor, confirmar) =>
+    post("/canciones/importar", { contenido, id_usuario_actor: idUsuarioActor, confirmar }),
 
   // Sesiones
   sesionActiva: () => get("/sesiones/activa"),
