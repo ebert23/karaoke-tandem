@@ -51,8 +51,11 @@ def main() -> None:
 
     print(f"\nAgregados en total: {total_agregados}")
 
-    print("\nComo queda cada categoria (minimo entre todos los grupos):")
-    for categoria in ("Normal", "Picante", "Creativo", "Grupo"):
+    # Las categorias salen de DEFAULT_RETOS y no de una lista fija: cuando se
+    # sumo "Shots" este resumen la dejaba afuera y parecia que no se habia
+    # cargado nada.
+    print("\nComo queda cada categoria (por grupo):")
+    for categoria in dict.fromkeys(c for _, _, c in DEFAULT_RETOS):
         fila = db.fetch_one(
             "SELECT MIN(n) AS minimo, MAX(n) AS maximo FROM ("
             "  SELECT COUNT(*) AS n FROM retos WHERE categoria = %s GROUP BY id_grupo"
