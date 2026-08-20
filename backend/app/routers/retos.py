@@ -31,6 +31,18 @@ def crear(data: RetoCreate, id_grupo: str = Depends(get_grupo_id)):
         raise HTTPException(400, str(e))
 
 
+@router.post("/restaurar", response_model=list[RetoOut])
+def restaurar(data: MiembroAccionRequest, id_grupo: str = Depends(get_grupo_id)):
+    """Trae los retos por defecto que le falten al grupo y devuelve la baraja."""
+    try:
+        svc.restaurar_defaults(id_grupo, data.id_usuario_actor)
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    return svc.listar(id_grupo)
+
+
 @router.delete("/{id_reto}", status_code=204)
 def eliminar(id_reto: str, data: MiembroAccionRequest, id_grupo: str = Depends(get_grupo_id)):
     try:

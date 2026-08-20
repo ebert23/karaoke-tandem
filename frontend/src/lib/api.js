@@ -141,6 +141,7 @@ export const api = {
   retoAleatorio: (categoria, excluir) => get(`/retos/aleatorio${qs({ categoria, excluir })}`),
   crearReto: (data) => post("/retos", data),
   eliminarReto: (idReto, idUsuarioActor) => del(`/retos/${idReto}`, { id_usuario_actor: idUsuarioActor }),
+  restaurarRetos: (idUsuarioActor) => post("/retos/restaurar", { id_usuario_actor: idUsuarioActor }),
 
   // Ranking / estadísticas
   rankingNoche: (idSesion) => get(`/ranking/noche/${idSesion}`),

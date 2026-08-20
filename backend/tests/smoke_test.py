@@ -333,6 +333,20 @@ def main() -> None:
                     json={"texto": "  reto DE prueba ", "categoria": "Normal", "dificultad": "Medio"})
     check(r.status_code == 400, "el mismo reto no entra dos veces a la baraja")
 
+    # Los retos con trago van en su propia categoria: no todas las salas
+    # toman, y asi se incluyen o se sacan de un toque.
+    shots = client.get("/api/retos", headers=h(g2["id"]), params={"categoria": "Shots"}).json()
+    check(len(shots) >= 15, f"la categoria Shots trae {len(shots)} retos")
+    check(all(s["categoria"] == "Shots" for s in shots), "el filtro por Shots no mezcla otras categorias")
+    r = client.post("/api/retos", headers=h(g1["id"]),
+                    json={"texto": "Shot propio", "categoria": "Shots", "dificultad": "Medio"})
+    check(r.status_code == 200, "se puede crear un reto propio en la categoria Shots")
+    client.request("DELETE", f"/api/retos/{r.json()['id']}", headers=h(g1["id"]),
+                   json={"id_usuario_actor": ana["id"]})
+    check(client.post("/api/retos", headers=h(g1["id"]),
+                      json={"texto": "x", "categoria": "Tragos", "dificultad": "Medio"}).status_code == 422,
+          "una categoria inventada se rechaza")
+
     # Cada categoria tiene que dar para una noche: con 2 retos, "Otro reto"
     # devolvia siempre el mismo.
     for categoria in ("Normal", "Picante", "Creativo", "Grupo"):
@@ -364,6 +378,20 @@ def main() -> None:
     check(delete(f"/api/retos/{ids[0]}", headers=h(g2["id"]),
                  json={"id_usuario_actor": ana["id"]}).status_code == 404,
           "no se puede borrar un reto de otro grupo")
+
+    # "Traer los retos que faltan": para los grupos que ya existian cuando la
+    # baraja por defecto crecio, o para quien borro algo y se arrepintio.
+    borrados = [x["id"] for x in client.get("/api/retos", headers=h(g1["id"])).json()][:3]
+    for rid in borrados:
+        delete(f"/api/retos/{rid}", headers=h(g1["id"]), json={"id_usuario_actor": ana["id"]})
+    faltos = client.get("/api/retos", headers=h(g1["id"])).json()
+    r = client.post("/api/retos/restaurar", headers=h(g1["id"]), json={"id_usuario_actor": luis["id"]})
+    check(r.status_code == 403, "un no-admin no puede traer los retos que faltan (403)")
+    r = client.post("/api/retos/restaurar", headers=h(g1["id"]), json={"id_usuario_actor": ana["id"]})
+    check(r.status_code == 200 and len(r.json()) == len(faltos) + 3,
+          f"restaurar devuelve los 3 que faltaban ({len(faltos)} -> {len(r.json())})")
+    otra_vez = client.post("/api/retos/restaurar", headers=h(g1["id"]), json={"id_usuario_actor": ana["id"]}).json()
+    check(len(otra_vez) == len(r.json()), "restaurar dos veces no duplica nada")
 
     # ---------------- Cierre + estadisticas ----------------
     r = client.post(f"/api/sesiones/{sid}/finalizar", headers=h(g1["id"]))

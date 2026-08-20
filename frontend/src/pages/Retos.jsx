@@ -10,6 +10,7 @@ const CATEGORIAS = [
   { id: "Picante", emoji: "🌶️" },
   { id: "Creativo", emoji: "🎨" },
   { id: "Grupo", emoji: "👯" },
+  { id: "Shots", emoji: "🥃" },
 ];
 
 export default function Retos() {
@@ -25,6 +26,7 @@ export default function Retos() {
   const [baraja, setBaraja] = useState([]);
   const [verBaraja, setVerBaraja] = useState(false);
   const [borrando, setBorrando] = useState("");
+  const [restaurando, setRestaurando] = useState(false);
 
   const esAdmin = grupo.admins?.includes(usuario.id) ?? false;
 
@@ -90,6 +92,22 @@ export default function Retos() {
     }
   }
 
+  async function restaurar() {
+    setRestaurando(true);
+    try {
+      const antes = baraja.length;
+      const lista = await api.restaurarRetos(usuario.id);
+      setBaraja(lista);
+      const sumados = lista.length - antes;
+      push(sumados > 0 ? `Se sumaron ${sumados} retos a la baraja 🎲` : "Ya tenías todos", "success");
+      setVerBaraja(true);
+    } catch (e) {
+      push(e.message, "error");
+    } finally {
+      setRestaurando(false);
+    }
+  }
+
   const porCategoria = useMemo(() => {
     const mapa = Object.fromEntries(CATEGORIAS.map((c) => [c.id, []]));
     for (const r of baraja) (mapa[r.categoria] ??= []).push(r);
@@ -101,6 +119,7 @@ export default function Retos() {
     Picante: "from-orange-500 to-red-500",
     Creativo: "from-emerald-400 to-teal-500",
     Grupo: "from-neon-purple to-neon-pink",
+    Shots: "from-amber-500 to-orange-600",
   };
 
   return (
@@ -220,7 +239,11 @@ export default function Retos() {
                 </div>
               );
             })}
-            {!esAdmin && (
+            {esAdmin ? (
+              <button onClick={restaurar} disabled={restaurando} className="btn-ghost !text-xs self-start">
+                {restaurando ? "Trayendo…" : "Traer los retos que faltan"}
+              </button>
+            ) : (
               <p className="text-white/30 text-xs">
                 Solo un admin del grupo puede sacar retos de la baraja.
               </p>

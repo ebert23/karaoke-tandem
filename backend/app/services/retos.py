@@ -8,7 +8,7 @@ from ..curated_data import DEFAULT_RETOS
 from . import grupos as grupos_svc
 from .ids import new_id
 
-CATEGORIAS = ["Normal", "Picante", "Creativo", "Grupo"]
+CATEGORIAS = ["Normal", "Picante", "Creativo", "Grupo", "Shots"]
 
 
 class RetoDuplicado(ValueError):
@@ -82,6 +82,38 @@ def crear(id_grupo: str, texto: str, dificultad: str, categoria: str) -> dict:
         (id_reto, id_grupo, texto, dificultad, categoria),
     )
     return {"id": id_reto, "texto": texto, "dificultad": dificultad, "categoria": categoria}
+
+
+def restaurar_defaults(id_grupo: str, id_usuario_actor: str) -> int:
+    """Agrega los retos por defecto que le falten al grupo. Devuelve cuántos.
+
+    Hace falta porque seed_default_retos solo corre al crear el grupo: cuando
+    la baraja por defecto crece (o cuando alguien borró algo y se arrepintió),
+    los grupos que ya existían no se enteran nunca.
+
+    Es a pedido y no automático — la categoría Shots no le sirve a todas las
+    salas, y meterle retos de alcohol a un grupo de la oficina sin que nadie lo
+    haya pedido sería peor que no tenerlos. Solo agrega: nunca borra ni pisa
+    los retos propios del grupo.
+    """
+    grupo = grupos_svc.get_por_id(id_grupo)
+    if grupo is None:
+        raise ValueError("Grupo no encontrado")
+    if not grupos_svc.es_admin(grupo, id_usuario_actor):
+        raise PermissionError("Solo un admin del grupo puede traer los retos que faltan")
+
+    existentes = {_clave(r["texto"]) for r in listar(id_grupo)}
+    faltantes = [
+        (new_id("R"), id_grupo, texto, dificultad, categoria)
+        for texto, dificultad, categoria in DEFAULT_RETOS
+        if _clave(texto) not in existentes
+    ]
+    if faltantes:
+        db.execute_many(
+            "INSERT INTO retos (id, id_grupo, texto, dificultad, categoria) VALUES (%s, %s, %s, %s, %s)",
+            faltantes,
+        )
+    return len(faltantes)
 
 
 def eliminar(id_grupo: str, id_reto: str, id_usuario_actor: str) -> None:

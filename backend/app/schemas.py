@@ -134,7 +134,7 @@ class CancionSesionOut(BaseModel):
 class RetoCreate(BaseModel):
     texto: str = Field(min_length=1, max_length=300)
     dificultad: str = Field(pattern="^(Fácil|Medio|Difícil)$")
-    categoria: str = Field(pattern="^(Normal|Picante|Creativo|Grupo)$")
+    categoria: str = Field(pattern="^(Normal|Picante|Creativo|Grupo|Shots)$")
 
 
 class RetoOut(BaseModel):

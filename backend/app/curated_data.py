@@ -43,6 +43,32 @@ DEFAULT_RETOS: list[list[str]] = [
     ["El grupo canta el coro y tú solo las estrofas", "Fácil", "Grupo"],
     ["El primero que se ría canta la siguiente contigo", "Medio", "Grupo"],
     ["Todos aplauden al ritmo hasta que termines", "Fácil", "Grupo"],
+
+    # Categoría aparte y no mezclada en "Picante" a propósito: no todas las
+    # noches se toma (una reunión de trabajo, gente manejando, quien no bebe),
+    # y teniéndola separada el grupo la incluye o la saca de un toque en vez
+    # de tener que borrar reto por reto.
+    ["Shot de afinación: toma 1 shot antes de empezar para calentar las cuerdas", "Fácil", "Shots"],
+    ["El culpable paga: quien agregó esta canción a la lista toma 1 shot solidario contigo", "Fácil", "Shots"],
+    ["Veredicto del jurado: al terminar el grupo vota con el pulgar, y si gana el pulgar abajo tomas 1 shot", "Medio", "Shots"],
+    ["Shot doble de escape: puedes pasarle esta canción a otro, pero pagas 2 shots de penalización", "Medio", "Shots"],
+    ["Shot cruzado: elige a alguien y tomen un shot con los brazos entrelazados justo antes del coro", "Fácil", "Shots"],
+    ["El brindis dramático: pausa antes del coro final, da un discurso emotivo de 15 segundos y brinda con todos", "Medio", "Shots"],
+    ["Ruleta rusa: gira una botella al terminar, y a quien apunte toma un shot contigo", "Fácil", "Shots"],
+    ["Castigo por risa: si te da un ataque de risa y dejas de cantar más de 3 segundos, pagas 1 shot al final", "Medio", "Shots"],
+    ["La ronda de la victoria: si logras que toda la sala cante el coro con los brazos arriba, todos toman menos tú", "Difícil", "Shots"],
+    ["Doble o nada: al terminar pide votación. Si es unánime mandas 1 shot a quien quieras; si una sola persona vota en contra, te lo tomas tú", "Difícil", "Shots"],
+    ["Shot por gallo: marca una raya cada vez que se te quiebre la voz y toma un shot por cada dos rayas", "Medio", "Shots"],
+    ["Bautizo del micrófono: el que canta después de ti elige tu trago y tú eliges el suyo", "Fácil", "Shots"],
+    ["Shot del olvido: si tienes que mirar la pantalla más de tres veces porque te perdiste, tomas 1 shot", "Medio", "Shots"],
+    ["Brindis por estrofa: antes de cada estrofa levantas el vaso y todos brindan. El que no levante, toma", "Medio", "Shots"],
+    ["El precio del aplauso: si nadie aplaude al terminar tomas 1 shot, pero si aplauden de pie eliges a dos que tomen", "Medio", "Shots"],
+    ["Shot a ciegas: alguien del grupo te prepara un shot sin decirte qué es y lo tomas antes del último coro", "Difícil", "Shots"],
+    ["Cadena de shots: eliges a alguien, esa persona elige a otra y esa a una tercera. Los tres toman contigo al final", "Fácil", "Shots"],
+    ["Multa por celular: cualquiera que mire el celular mientras cantas paga 1 shot", "Fácil", "Shots"],
+    ["Dueto forzado: canta con quien tengas a la derecha, y si cualquiera de los dos se equivoca toman ambos", "Medio", "Shots"],
+    ["Impuesto al desafinado: el que se ría de cómo cantas toma 1 shot, pero si desafinas feo lo tomas tú", "Medio", "Shots"],
+    ["La última nota: si sostienes la última nota más de 5 segundos, todos toman un shot en tu honor", "Difícil", "Shots"],
 ]
 
 # Sugerencias de canciones populares por género, para el modal de "agregar
