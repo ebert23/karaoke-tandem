@@ -418,6 +418,108 @@ function ImportarCatalogo({ idUsuario, onImportado }) {
   );
 }
 
+// Packs de colecciones: el atajo para llenar un catálogo vacío.
+//
+// Sin preview de dos pasos como el CSV, y a propósito: el botón ya dice
+// exactamente cuántas van a entrar, y las repetidas las descarta el backend
+// con la misma regla de siempre. Un paso más acá sería ceremonia.
+function PacksColecciones({ idUsuario, onCargado }) {
+  const { push } = useToast();
+  const [abierto, setAbierto] = useState(false);
+  const [lista, setLista] = useState([]);
+  const [cargando, setCargando] = useState("");
+
+  async function refrescar() {
+    try {
+      setLista(await api.coleccionesCatalogo());
+    } catch (e) {
+      push(e.message, "error");
+    }
+  }
+
+  function abrir() {
+    setAbierto(true);
+    refrescar();
+  }
+
+  async function cargar(col) {
+    setCargando(col.id);
+    try {
+      const r = await api.cargarColeccion(col.id, idUsuario, true);
+      push(
+        r.importadas > 0
+          ? `+${r.importadas} canciones de ${col.nombre} 🎉`
+          : `${col.nombre} ya estaba completa`,
+        r.importadas > 0 ? "success" : "info",
+      );
+      await refrescar();
+      onCargado?.();
+    } catch (e) {
+      push(e.message, "error");
+    } finally {
+      setCargando("");
+    }
+  }
+
+  return (
+    <>
+      <button onClick={abrir} className="btn-ghost !text-xs">
+        🎁 Packs
+      </button>
+
+      {abierto && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
+          <div className="card p-5 w-full max-w-md max-h-[85vh] overflow-y-auto">
+            <h3 className="font-display font-bold text-lg">Packs de canciones</h3>
+            <p className="text-white/50 text-xs mt-1 mb-4">
+              Colecciones armadas a mano. Suma al catálogo solo las que te falten — nunca repite
+              lo que ya tenés.
+            </p>
+
+            <div className="flex flex-col gap-2">
+              {lista.map((col) => (
+                <div key={col.id} className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                  <div className="flex items-start gap-3">
+                    <span className="text-2xl leading-none shrink-0">{col.emoji}</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-display font-bold text-sm">{col.nombre}</p>
+                      <p className="text-white/45 text-xs">{col.descripcion}</p>
+                      <p className="text-white/35 text-[11px] mt-1">
+                        {col.total} en tu lista
+                        {col.disponibles_para_cargar > 0 && ` · ${col.disponibles_para_cargar} para sumar`}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => cargar(col)}
+                      disabled={col.disponibles_para_cargar === 0 || cargando === col.id}
+                      className="btn-primary !px-3 !py-1.5 !text-xs shrink-0"
+                    >
+                      {col.disponibles_para_cargar === 0
+                        ? "Completa"
+                        : cargando === col.id
+                          ? "…"
+                          : `+ ${col.disponibles_para_cargar}`}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <p className="text-white/35 text-[11px] mt-4">
+              Los packs entran sin link de YouTube: la cuota de la API son 100 búsquedas por día
+              para toda la app. En modo salón no hace falta; en grupo lo completás al editarlas.
+            </p>
+
+            <button onClick={() => setAbierto(false)} className="btn-ghost w-full mt-3">
+              Cerrar
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function Semana() {
   const { usuario } = useIdentity();
   const { grupo } = useGroup();
@@ -427,7 +529,9 @@ export default function Semana() {
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [genero, setGenero] = useState("");
-  const [vista, setVista] = useState("todas"); // todas | top10
+  const [vista, setVista] = useState("todas"); // todas | top10 | coleccion
+  const [colecciones, setColecciones] = useState([]);
+  const [coleccion, setColeccion] = useState("");
   const [soloFavoritas, setSoloFavoritas] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ titulo: "", artista: "", genero: "", link_youtube: "" });
@@ -465,7 +569,9 @@ export default function Semana() {
       const data =
         vista === "top10"
           ? await api.top10(usuario.id)
-          : await api.canciones({ id_usuario: usuario.id, genero, q, favoritas: soloFavoritas || undefined });
+          : vista === "coleccion"
+            ? await api.cancionesColeccion(coleccion, { id_usuario: usuario.id })
+            : await api.canciones({ id_usuario: usuario.id, genero, q, favoritas: soloFavoritas || undefined });
       setCanciones(data);
     } catch (e) {
       push(e.message, "error");
@@ -477,7 +583,13 @@ export default function Semana() {
   useEffect(() => {
     cargar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vista, genero, soloFavoritas]);
+  }, [vista, coleccion, genero, soloFavoritas]);
+
+  // Se recargan al volver del alta o de un pack: una canción nueva puede
+  // hacer que una colección cruce el mínimo y aparezca.
+  useEffect(() => {
+    api.colecciones().then(setColecciones).catch(() => {});
+  }, [canciones.length]);
 
   useEffect(() => {
     const t = setTimeout(cargar, 300);
@@ -559,6 +671,7 @@ export default function Semana() {
           <a href={api.exportCsvUrl()} className="btn-ghost" download>
             CSV
           </a>
+          {esAdmin && <PacksColecciones idUsuario={usuario.id} onCargado={cargar} />}
           {esAdmin && <ImportarCatalogo idUsuario={usuario.id} onImportado={cargar} />}
           <button onClick={() => setShowForm((s) => !s)} className="btn-primary">
             <IconPlus /> Agregar
@@ -637,11 +750,62 @@ export default function Semana() {
         </form>
       )}
 
+      {colecciones.length > 0 && (
+        <div className="-mx-1 px-1 overflow-x-auto no-scrollbar">
+          <div className="flex gap-2 pb-1 w-max">
+            {colecciones.map((col) => {
+              const activa = vista === "coleccion" && coleccion === col.id;
+              return (
+                <button
+                  key={col.id}
+                  onClick={() => {
+                    if (activa) {
+                      setVista("todas");
+                      setColeccion("");
+                      return;
+                    }
+                    // La coleccion manda: dejar puesto un genero o "favoritas"
+                    // daria una lista filtrada dos veces que nadie pidio.
+                    setGenero("");
+                    setSoloFavoritas(false);
+                    setColeccion(col.id);
+                    setVista("coleccion");
+                  }}
+                  className={`shrink-0 rounded-2xl px-3 py-2 text-left border transition ${
+                    activa
+                      ? `bg-gradient-to-br ${col.color} border-white/30`
+                      : "bg-white/5 border-white/10"
+                  }`}
+                >
+                  <span className="block text-lg leading-none">{col.emoji}</span>
+                  <span className="block font-display font-bold text-sm mt-1 whitespace-nowrap">
+                    {col.nombre}
+                  </span>
+                  <span className="block text-[11px] text-white/50">{col.total} canciones</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-        <button onClick={() => setVista("todas")} className={vista === "todas" ? "chip-active" : "chip"}>
+        <button
+          onClick={() => {
+            setVista("todas");
+            setColeccion("");
+          }}
+          className={vista === "todas" ? "chip-active" : "chip"}
+        >
           Todas
         </button>
-        <button onClick={() => setVista("top10")} className={vista === "top10" ? "chip-active" : "chip"}>
+        <button
+          onClick={() => {
+            setVista("top10");
+            setColeccion("");
+          }}
+          className={vista === "top10" ? "chip-active" : "chip"}
+        >
           🏆 Top 10
         </button>
         <button onClick={() => setSoloFavoritas((s) => !s)} className={soloFavoritas ? "chip-active shrink-0" : "chip shrink-0"}>
@@ -666,7 +830,11 @@ export default function Semana() {
       {loading ? (
         <p className="text-white/40 text-center py-10">Cargando canciones…</p>
       ) : canciones.length === 0 ? (
-        <p className="text-white/40 text-center py-10">Aún no hay canciones. ¡Agrega la primera!</p>
+        <p className="text-white/40 text-center py-10">
+          {vista === "coleccion"
+            ? "Esta colección quedó vacía."
+            : "Aún no hay canciones. ¡Agrega la primera!"}
+        </p>
       ) : (
         <div className="flex flex-col gap-2.5">
           {canciones.map((c) => (

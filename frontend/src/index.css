@@ -74,3 +74,13 @@ body {
     @apply font-display font-extrabold bg-gradient-to-r from-neon-pinklight via-neon-pink to-neon-purple bg-clip-text text-transparent;
   }
 }
+
+/* Fila de chips con scroll horizontal: se desliza con el dedo, y la barra
+   nativa de escritorio no aporta nada ahi y roba dos pixeles de alto. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

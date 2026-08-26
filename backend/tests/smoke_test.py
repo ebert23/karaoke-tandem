@@ -483,6 +483,7 @@ def main() -> None:
 
     aleatorio_por_jugador()
     badges_del_ranking()
+    colecciones()
     salon()
 
     print(f"\nTODOS LOS CHECKS PASARON ({_checks})")
@@ -819,6 +820,120 @@ def salon() -> None:
     check(g["modo"] == "grupo", "un grupo creado sin modo sigue siendo 'grupo'")
     check(client.get("/api/dj/cola", headers={**h(g["id"]), "X-DJ-Codigo": "x"}).status_code == 400,
           "un grupo normal no tiene vista de DJ (400)")
+
+
+def colecciones() -> None:
+    """Colecciones tematicas: el filtro por vibra y los packs curados.
+
+    La pertenencia se calcula al vuelo y no se guarda, asi que lo que hay que
+    proteger son las tres vias de coincidencia (artista, genero y titulo
+    curado) y el minimo para mostrar: si alguna se rompiera, las colecciones
+    seguirian respondiendo 200 con listas vacias y nadie se enteraria.
+    """
+    from app.services import colecciones as col_svc
+
+    g = crear_grupo("Colecciones Test", "Ana")
+    gid = g["id"]
+    ana = client.get("/api/usuarios", headers=h(gid)).json()[0]
+
+    # ---------------- Grupo vacio ----------------
+    r = client.get("/api/colecciones", headers=h(gid))
+    check(r.status_code == 200 and r.json() == [],
+          "un grupo sin canciones no muestra ninguna coleccion")
+
+    r = client.get("/api/colecciones/catalogo", headers=h(gid))
+    catalogo = r.json()
+    check(len(catalogo) == len(col_svc.COLECCIONES),
+          f"la vista del dueno muestra las {len(col_svc.COLECCIONES)} colecciones aunque esten vacias")
+    check(all(c["disponibles_para_cargar"] > 0 for c in catalogo),
+          "en un grupo vacio todos los packs tienen canciones para sumar")
+
+    # ---------------- Cargar un pack ----------------
+    r = client.post("/api/colecciones/cumbia/cargar", headers=h(gid),
+                    json={"id_usuario_actor": ana["id"], "confirmar": False})
+    previa = r.json()
+    check(r.status_code == 200 and previa["listas"] > 0 and previa["importadas"] == 0,
+          "la previa del pack dice cuantas entran sin escribir nada")
+    check(len(client.get("/api/canciones", headers=h(gid)).json()) == 0,
+          "tras la previa el catalogo sigue vacio")
+
+    r = client.post("/api/colecciones/cumbia/cargar", headers=h(gid),
+                    json={"id_usuario_actor": ana["id"], "confirmar": True})
+    carga = r.json()
+    check(carga["importadas"] == previa["listas"],
+          f"confirmar carga las {previa['listas']} que anuncio la previa")
+
+    r = client.post("/api/colecciones/cumbia/cargar", headers=h(gid),
+                    json={"id_usuario_actor": ana["id"], "confirmar": True})
+    check(r.json()["importadas"] == 0 and r.json()["ya_estaban"] == carga["importadas"],
+          "cargar el mismo pack dos veces no duplica nada")
+
+    # ---------------- Permisos y errores ----------------
+    r = client.post("/api/colecciones/cumbia/cargar", headers=h(gid),
+                    json={"id_usuario_actor": "U-noexiste", "confirmar": True})
+    check(r.status_code == 403, "cargar un pack sin ser admin da 403")
+    check(client.get("/api/colecciones/inventada/canciones", headers=h(gid)).status_code == 404,
+          "una coleccion que no existe da 404")
+
+    # ---------------- Las tres vias de coincidencia ----------------
+    r = client.get("/api/colecciones", headers=h(gid))
+    visibles = {c["id"]: c for c in r.json()}
+    check("cumbia" in visibles and visibles["cumbia"]["total"] == carga["importadas"],
+          "la coleccion cargada aparece con todas sus canciones")
+
+    # Artista: un tema que NO esta en la lista curada, de un artista que si.
+    client.post("/api/canciones", headers=h(gid),
+                json={"titulo": "Tema Inventado Del Grupo 5", "artista": "Grupo 5",
+                      "genero": "Otro", "agregado_por": "Ana"})
+    # Genero: artista desconocido pero el genero dice cumbia.
+    client.post("/api/canciones", headers=h(gid),
+                json={"titulo": "Otro Tema Inventado", "artista": "Banda Que No Existe",
+                      "genero": "Cumbia Norteña", "agregado_por": "Ana"})
+    titulos = {c["titulo"] for c in client.get("/api/colecciones/cumbia/canciones", headers=h(gid)).json()}
+    check("Tema Inventado Del Grupo 5" in titulos, "una cancion entra a la coleccion por su artista")
+    check("Otro Tema Inventado" in titulos, "una cancion entra a la coleccion por su genero")
+
+    # Titulo curado con otro artista: los covers vienen atribuidos a quien los subio.
+    client.post("/api/canciones", headers=h(gid),
+                json={"titulo": "El Sonidito", "artista": "Un Cover Cualquiera",
+                      "genero": "Otro", "agregado_por": "Ana"})
+    dentro = client.get("/api/colecciones/cumbia/canciones", headers=h(gid)).json()
+    check(any(c["artista"] == "Un Cover Cualquiera" for c in dentro),
+          "un cover entra a la coleccion por el titulo, aunque cambie el artista")
+
+    # Y algo que no tiene nada que ver no entra por ninguna via.
+    client.post("/api/canciones", headers=h(gid),
+                json={"titulo": "Nada Que Ver", "artista": "Nadie Conocido",
+                      "genero": "Experimental", "agregado_por": "Ana"})
+    titulos = {c["titulo"] for c in client.get("/api/colecciones/cumbia/canciones", headers=h(gid)).json()}
+    check("Nada Que Ver" not in titulos, "una cancion ajena no entra a la coleccion")
+
+    # ---------------- El minimo para mostrar ----------------
+    g2 = crear_grupo("Colecciones Minimo Test", "Ana")
+    for i in range(col_svc.MINIMO_PARA_MOSTRAR - 1):
+        client.post("/api/canciones", headers=h(g2["id"]),
+                    json={"titulo": f"Balada {i}", "artista": "José José",
+                          "genero": "Balada", "agregado_por": "Ana"})
+    ids = {c["id"] for c in client.get("/api/colecciones", headers=h(g2["id"])).json()}
+    check("cortavenas" not in ids,
+          f"con menos de {col_svc.MINIMO_PARA_MOSTRAR} canciones la coleccion no se muestra")
+    client.post("/api/canciones", headers=h(g2["id"]),
+                json={"titulo": "Balada Final", "artista": "José José",
+                      "genero": "Balada", "agregado_por": "Ana"})
+    ids = {c["id"] for c in client.get("/api/colecciones", headers=h(g2["id"])).json()}
+    check("cortavenas" in ids,
+          f"al llegar a {col_svc.MINIMO_PARA_MOSTRAR} la coleccion aparece")
+
+    # ---------------- Normalizacion ----------------
+    check(col_svc._norm("JESSE &amp; JOY") == col_svc._norm("Jesse & Joy"),
+          "las entidades HTML de los titulos de YouTube no rompen la coincidencia")
+    rock = col_svc._POR_ID["rock_espanol"]
+    check(col_svc._pertenece({"titulo": "Corazón Espinado", "artista": "Santana ft. Maná",
+                              "genero": "Latin Rock"}, rock),
+          "un artista invitado cuenta ('Santana ft. Mana' entra por Mana)")
+    check(not col_svc._pertenece({"titulo": "Smells Like Teen Spirit", "artista": "Nirvana",
+                                  "genero": "Grunge"}, rock),
+          "el rock en ingles NO cae en Rock en Espanol")
 
 
 if __name__ == "__main__":

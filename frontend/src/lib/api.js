@@ -100,6 +100,15 @@ export const api = {
 
   // Canciones
   canciones: (params = {}) => get(`/canciones${qs(params)}`),
+  colecciones: () => get("/colecciones"),
+  coleccionesCatalogo: () => get("/colecciones/catalogo"),
+  cancionesColeccion: (idColeccion, params = {}) =>
+    get(`/colecciones/${idColeccion}/canciones${qs(params)}`),
+  cargarColeccion: (idColeccion, idUsuarioActor, confirmar) =>
+    post(`/colecciones/${idColeccion}/cargar`, {
+      id_usuario_actor: idUsuarioActor,
+      confirmar,
+    }),
   top10: (idUsuario) => get(`/canciones/top10${qs({ id_usuario: idUsuario })}`),
   agregarCancion: (data) => post("/canciones", data),
   editarCancion: (idCancion, data, idUsuario) => put(`/canciones/${idCancion}`, { ...data, id_usuario: idUsuario }),
@@ -168,6 +177,9 @@ export const api = {
   // Cliente en la mesa: solo con el código del QR, sin X-Grupo-Id.
   estadoMesa: (codigo) => get(`/mesa/${codigo}`),
   catalogoMesa: (codigo, params = {}) => get(`/mesa/${codigo}/catalogo${qs(params)}`),
+  coleccionesMesa: (codigo) => get(`/mesa/${codigo}/colecciones`),
+  cancionesColeccionMesa: (codigo, idColeccion) =>
+    get(`/mesa/${codigo}/colecciones/${idColeccion}`),
   pedirCancion: (codigo, idCancion, pedidoPor) =>
     post(`/mesa/${codigo}/pedidos`, { id_cancion: idCancion, pedido_por: pedidoPor }),
   cancelarPedido: (codigo, idPedido) => del(`/mesa/${codigo}/pedidos/${idPedido}`),

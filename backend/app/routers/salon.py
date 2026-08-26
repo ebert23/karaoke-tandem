@@ -16,6 +16,7 @@ from ..deps import get_grupo_id, requiere_dj
 from ..schemas import (
     CancionOut,
     ColaSalonOut,
+    ColeccionOut,
     DjEntrarRequest,
     EstadoMesaOut,
     GrupoOut,
@@ -29,6 +30,7 @@ from ..schemas import (
     SugerenciaMesaOut,
 )
 from ..services import canciones as canciones_svc
+from ..services import colecciones as colecciones_svc
 from ..services import grupos as grupos_svc
 from ..services import mesas as mesas_svc
 from ..services import sesiones as sesiones_svc
@@ -134,6 +136,26 @@ def catalogo_mesa(codigo: str, q: str | None = None, genero: str | None = None):
     que el DJ realmente tiene para poner."""
     mesa = _mesa_por_codigo(codigo)
     return canciones_svc.listar(mesa["id_grupo"], q=q, genero=genero)
+
+
+@router.get("/api/mesa/{codigo}/colecciones", response_model=list[ColeccionOut])
+def colecciones_mesa(codigo: str):
+    """Las colecciones que este local tiene con canciones suficientes.
+
+    Es la puerta de entrada para quien escaneó el QR y no sabe qué cantar: el
+    buscador le sirve al que ya decidió, la colección al que no.
+    """
+    mesa = _mesa_por_codigo(codigo)
+    return colecciones_svc.listar(mesa["id_grupo"])
+
+
+@router.get("/api/mesa/{codigo}/colecciones/{id_coleccion}", response_model=list[CancionOut])
+def canciones_de_coleccion_mesa(codigo: str, id_coleccion: str):
+    mesa = _mesa_por_codigo(codigo)
+    try:
+        return colecciones_svc.canciones_de(mesa["id_grupo"], id_coleccion)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
 
 
 @router.post("/api/mesa/{codigo}/pedidos", response_model=PedidoOut)

@@ -30,6 +30,9 @@ export default function Mesa() {
   const [busqueda, setBusqueda] = useState("");
   const [nombre, setNombre] = useState(() => localStorage.getItem(nombreMesaStorageKey(codigo)) || "");
   const [pidiendo, setPidiendo] = useState("");
+  const [colecciones, setColecciones] = useState([]);
+  const [coleccionActiva, setColeccionActiva] = useState("");
+  const [cancionesColeccion, setCancionesColeccion] = useState([]);
   const [mostrarSugerir, setMostrarSugerir] = useState(false);
   const [sugerencia, setSugerencia] = useState({ titulo: "", artista: "" });
 
@@ -63,6 +66,10 @@ export default function Mesa() {
   useEffect(() => {
     cargar();
     api.catalogoMesa(codigo).then(setCatalogo).catch(() => {});
+    // Si el local no tiene suficientes canciones de ninguna vibra, el backend
+    // devuelve lista vacia y la fila de chips no se dibuja. Nadie ve una
+    // seccion que no le sirve.
+    api.coleccionesMesa(codigo).then(setColecciones).catch(() => {});
     const id = setInterval(() => cargar({ desdeSondeo: true }), POLL_MESA_MS);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -73,15 +80,38 @@ export default function Mesa() {
     localStorage.setItem(nombreMesaStorageKey(codigo), v);
   }
 
+  // Con una coleccion abierta el buscador filtra adentro de ella y no sobre
+  // todo el catalogo: si elegiste "Las Cortavenas" y escribis "amor", querias
+  // baladas con amor, no las 40 canciones del local que dicen amor.
+  const base = coleccionActiva ? cancionesColeccion : catalogo;
+
   const filtrado = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
-    if (!q) return catalogo.slice(0, 40);
+    if (!q) return base.slice(0, 40);
     // Busca por título Y por artista: en un karaoke la gente piensa "algo de
     // Alejandro Fernández" mucho más seguido que un título exacto.
-    return catalogo
+    return base
       .filter((c) => c.titulo.toLowerCase().includes(q) || c.artista.toLowerCase().includes(q))
       .slice(0, 40);
-  }, [catalogo, busqueda]);
+  }, [base, busqueda]);
+
+  const detalleColeccion = colecciones.find((c) => c.id === coleccionActiva);
+
+  async function abrirColeccion(col) {
+    if (coleccionActiva === col.id) {
+      setColeccionActiva("");
+      setCancionesColeccion([]);
+      return;
+    }
+    setBusqueda("");
+    setColeccionActiva(col.id);
+    try {
+      setCancionesColeccion(await api.cancionesColeccionMesa(codigo, col.id));
+    } catch (e) {
+      push(e.message, "error");
+      setColeccionActiva("");
+    }
+  }
 
   const idsPedidos = useMemo(
     () => new Set((estado?.mis_pedidos || []).map((p) => p.id_cancion)),
@@ -241,12 +271,57 @@ export default function Mesa() {
         )}
       </section>
 
-      <section className="px-4">
-        <h2 className="label">Buscar en el catálogo</h2>
+      {colecciones.length > 0 && (
+        <section className="px-4 pt-1">
+          <h2 className="label">¿Qué se te antoja?</h2>
+          {/* Scroll horizontal encerrado en su propio contenedor: los chips se
+              salen a lo ancho, la pagina no. El -mx-4/px-4 hace que el primero
+              y el ultimo queden al ras del margen igual que el resto. */}
+          <div className="-mx-4 px-4 overflow-x-auto no-scrollbar">
+            <div className="flex gap-2 pb-1 w-max">
+              {colecciones.map((col) => {
+                const activa = coleccionActiva === col.id;
+                return (
+                  <button
+                    key={col.id}
+                    onClick={() => abrirColeccion(col)}
+                    className={`shrink-0 rounded-2xl px-3 py-2 text-left border transition ${
+                      activa
+                        ? `bg-gradient-to-br ${col.color} border-white/30`
+                        : "bg-white/5 border-white/10"
+                    }`}
+                  >
+                    <span className="block text-lg leading-none">{col.emoji}</span>
+                    <span className="block font-display font-bold text-sm mt-1 whitespace-nowrap">
+                      {col.nombre}
+                    </span>
+                    <span className="block text-[11px] text-white/50">{col.total} canciones</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      )}
+
+      <section className="px-4 pt-3">
+        <div className="flex items-baseline justify-between gap-2">
+          <h2 className="label">
+            {detalleColeccion ? detalleColeccion.nombre : "Buscar en el catálogo"}
+          </h2>
+          {detalleColeccion && (
+            <button onClick={() => abrirColeccion(detalleColeccion)} className="btn-ghost !px-2 !py-1 !text-xs">
+              Ver todo
+            </button>
+          )}
+        </div>
+        {detalleColeccion && (
+          <p className="text-white/45 text-xs mb-2 -mt-1">{detalleColeccion.descripcion}</p>
+        )}
         <input
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
-          placeholder="Canción o artista…"
+          placeholder={detalleColeccion ? `Buscar en ${detalleColeccion.nombre}…` : "Canción o artista…"}
           className="input"
         />
 
@@ -280,9 +355,26 @@ export default function Mesa() {
           })}
         </ul>
 
+        {!busqueda.trim() && detalleColeccion && filtrado.length === 0 && (
+          <p className="text-white/40 text-sm py-4 text-center">
+            Esta colección quedó vacía. Probá con otra.
+          </p>
+        )}
+
         {busqueda.trim() && filtrado.length === 0 && (
           <div className="text-center py-6">
-            <p className="text-white/50 text-sm mb-3">No encontramos "{busqueda}" en el catálogo del local.</p>
+            <p className="text-white/50 text-sm mb-3">
+              No encontramos "{busqueda}" en{" "}
+              {detalleColeccion ? detalleColeccion.nombre : "el catálogo del local"}.
+            </p>
+            {detalleColeccion && (
+              <button
+                onClick={() => abrirColeccion(detalleColeccion)}
+                className="btn-ghost !text-xs mr-2"
+              >
+                Buscar en todo el catálogo
+              </button>
+            )}
             <button onClick={() => { setMostrarSugerir(true); setSugerencia({ titulo: busqueda, artista: "" }); }} className="btn-ghost !text-xs">
               Pedirla igual
             </button>

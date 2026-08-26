@@ -17,7 +17,10 @@ from fastapi.staticfiles import StaticFiles
 
 from . import db
 from .config import settings
-from .routers import canciones, grupos, health, ranking, retos, salon, sesiones, stats, usuarios, youtube
+from .routers import (
+    canciones, colecciones, grupos, health, ranking, retos, salon, sesiones,
+    stats, usuarios, youtube,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("karaoketandem")
@@ -64,6 +67,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 app.include_router(health.router)
 app.include_router(grupos.router)
 app.include_router(canciones.router)
+app.include_router(colecciones.router)
 app.include_router(usuarios.router)
 app.include_router(sesiones.router)
 app.include_router(salon.router)

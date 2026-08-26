@@ -119,6 +119,34 @@ class ImportacionOut(BaseModel):
     muestra: list[CancionPreviaOut]
 
 
+# --- Colecciones temáticas ---
+class ColeccionOut(BaseModel):
+    id: str
+    nombre: str
+    emoji: str
+    descripcion: str
+    color: str
+    # Cuántas del catálogo del grupo caen en la colección.
+    total: int
+    # Cuántas del pack curado todavía no están. Siempre 0 en el listado del
+    # que va a cantar: solo tiene sentido en la vista del dueño.
+    disponibles_para_cargar: int = 0
+
+
+class ColeccionCargarRequest(BaseModel):
+    id_usuario_actor: str
+    confirmar: bool = False
+
+
+class CargaColeccionOut(BaseModel):
+    id_coleccion: str
+    nombre: str
+    listas: int
+    importadas: int
+    ya_estaban: int
+    muestra: list[CancionPreviaOut]
+
+
 # --- Usuarios ---
 class UsuarioCreate(BaseModel):
     nombre: str = Field(min_length=1, max_length=80)
