@@ -326,7 +326,9 @@ export default function Karaoke() {
       }
       setSesion(s);
       if (s) {
-        setTurnos(await api.detalleSesion(s.id_sesion));
+        const detalle = await api.detalleSesion(s.id_sesion);
+        setTurnos(detalle);
+        anclarReto(s.id_sesion, detalle);
         setCanciones(await api.canciones({ id_usuario: usuario.id }));
       }
     } catch (e) {
@@ -351,16 +353,24 @@ export default function Karaoke() {
   }
 
   // Arma el generador de umbrales sembrado con el id de sesión (una sola vez
-  // por sesión) y calcula el primer umbral relativo a las canciones que ya
+  // por sesión) y fija el primer umbral relativo a las canciones que YA
   // estaban cantadas al entrar — así todos los celulares conectados a la
   // misma sesión coinciden en cuándo toca el próximo reto automático.
-  useEffect(() => {
-    if (!sesion || sesionInicializadaRetoRef.current === sesion.id_sesion) return;
-    sesionInicializadaRetoRef.current = sesion.id_sesion;
-    generadorRetoRef.current = crearGeneradorUmbrales(sesion.id_sesion);
-    const cantadasAlEntrar = turnos.filter((t) => t.estado === "Cantada").length;
+  //
+  // Se llama con los turnos en la mano y no desde un useEffect a propósito.
+  // Antes era un efecto que dependía de `turnos`, y como la sesión se guarda
+  // en el estado ANTES de que llegue el detalle, corría con la lista vacía:
+  // anclaba el umbral en 0 + 3, el ref lo dejaba fijo ahí, y al llegar los
+  // turnos reales el disparador veía "58 cantadas >= 3" y sacaba un reto
+  // apenas se abría la pantalla. Pasaba en cualquier noche con 3 o más
+  // canciones ya cantadas.
+  function anclarReto(idSesion, turnosIniciales) {
+    if (sesionInicializadaRetoRef.current === idSesion) return;
+    sesionInicializadaRetoRef.current = idSesion;
+    generadorRetoRef.current = crearGeneradorUmbrales(idSesion);
+    const cantadasAlEntrar = turnosIniciales.filter((t) => t.estado === "Cantada").length;
     setProximoUmbralReto(cantadasAlEntrar + generadorRetoRef.current());
-  }, [sesion, turnos]);
+  }
 
   // Dispara el reto automático en base a las canciones YA cantadas (dato
   // sincronizado por sondeo entre todos los dispositivos), no a un contador
@@ -567,6 +577,7 @@ export default function Karaoke() {
         onCreada={async (s) => {
           setSesion(s);
           setTurnos([]);
+          anclarReto(s.id_sesion, []);
           setCanciones(await api.canciones({ id_usuario: usuario.id }));
         }}
       />
