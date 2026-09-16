@@ -15,3 +15,8 @@ export function extractVideoId(url) {
   }
   return null;
 }
+
+export function youtubeWatchUrl(url) {
+  const videoId = extractVideoId(url);
+  return videoId ? `https://www.youtube.com/watch?v=${videoId}` : "";
+}

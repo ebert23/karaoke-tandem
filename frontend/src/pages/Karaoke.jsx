@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { IconBell, IconCheck, IconClock, IconDice, IconPlus, IconSkip, IconTrash, IconUsers } from "../components/Icons.jsx";
 import RetoModal from "../components/RetoModal.jsx";
+import CastYoutubeButton from "../components/CastYoutubeButton.jsx";
 import YouTubePlayer from "../components/YouTubePlayer.jsx";
 import { useGroup } from "../lib/GroupContext.jsx";
 import { useIdentity } from "../lib/IdentityContext.jsx";
@@ -637,10 +638,8 @@ export default function Karaoke() {
             <p className="text-white/60 mb-3">{pendiente.cancion?.artista}</p>
             <div className="mb-4">
               <YouTubePlayer linkYoutube={pendiente.cancion?.link_youtube} />
+              <CastYoutubeButton linkYoutube={pendiente.cancion?.link_youtube} />
             </div>
-            <p className="text-white/30 text-xs mb-4 -mt-2">
-              Tocá el ícono de transmitir en el video para proyectarlo en una TV con Chromecast en la misma wifi
-            </p>
             <Temporizador turnoKey={pendiente.turno} />
             {!puntuando ? (
               <div className="flex gap-2 justify-center mt-2">
