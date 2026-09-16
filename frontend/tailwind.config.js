@@ -6,29 +6,29 @@ export default {
     extend: {
       colors: {
         ink: {
-          950: "#0a0a0f",
-          900: "#121018",
-          800: "#1a1725",
-          700: "#241f33",
+          950: "#070b14",
+          900: "#0d1422",
+          800: "#151f31",
+          700: "#202d42",
         },
         neon: {
-          purple: "#a855f7",
-          pink: "#ff2fb0",
-          pinklight: "#ff7ac9",
-          cyan: "#38f4ff",
+          purple: "#7c83ff",
+          pink: "#ff5468",
+          pinklight: "#ff8b78",
+          cyan: "#43e7d2",
         },
       },
       fontFamily: {
-        display: ["'Poppins'", "system-ui", "sans-serif"],
-        body: ["'Inter'", "system-ui", "sans-serif"],
+        display: ["'Space Grotesk'", "system-ui", "sans-serif"],
+        body: ["'DM Sans'", "system-ui", "sans-serif"],
       },
       boxShadow: {
-        neon: "0 0 20px rgba(255, 47, 176, 0.45), 0 0 40px rgba(168, 85, 247, 0.25)",
-        "neon-sm": "0 0 10px rgba(255, 47, 176, 0.4)",
+        neon: "0 12px 36px rgba(255, 84, 104, 0.22), 0 0 28px rgba(67, 231, 210, 0.12)",
+        "neon-sm": "0 8px 24px rgba(255, 84, 104, 0.2)",
       },
       backgroundImage: {
         "grid-glow":
-          "radial-gradient(circle at 20% 20%, rgba(168,85,247,0.25), transparent 40%), radial-gradient(circle at 80% 0%, rgba(255,47,176,0.2), transparent 40%), radial-gradient(circle at 50% 100%, rgba(56,244,255,0.12), transparent 45%)",
+          "radial-gradient(circle at 15% 10%, rgba(124,131,255,0.18), transparent 32%), radial-gradient(circle at 90% 15%, rgba(255,84,104,0.13), transparent 30%), radial-gradient(circle at 50% 100%, rgba(67,231,210,0.08), transparent 40%)",
       },
       animation: {
         pulseGlow: "pulseGlow 2.4s ease-in-out infinite",

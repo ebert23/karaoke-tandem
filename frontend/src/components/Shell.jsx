@@ -13,14 +13,26 @@ const NAV_ITEMS = [
   { to: "/historial", label: "Historial", Icon: IconHistory },
 ];
 
+function Brand({ compact = false }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="equalizer" aria-hidden="true"><i /><i /><i /><i /></span>
+      <div className="leading-none">
+        <p className={`${compact ? "text-base" : "text-lg"} font-display font-bold tracking-[-0.04em]`}>Karaoke<span className="text-neon-pinklight">Tandem</span></p>
+        {!compact && <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.22em] text-white/35">La noche es de todos</p>}
+      </div>
+    </div>
+  );
+}
+
 function NavItemDesktop({ to, label, Icon, end }) {
   return (
     <NavLink
       to={to}
       end={end}
       className={({ isActive }) =>
-        `flex items-center gap-3 px-4 py-3 rounded-xl font-display font-semibold text-sm transition-colors ${
-          isActive ? "bg-gradient-to-r from-neon-purple/80 to-neon-pink/80 text-white shadow-neon-sm" : "text-white/60 hover:bg-white/5 hover:text-white"
+        `flex items-center gap-3 px-4 py-3 rounded-xl font-display font-semibold text-sm transition-all ${
+          isActive ? "bg-white/[0.09] border border-white/10 text-white shadow-neon-sm" : "border border-transparent text-white/55 hover:bg-white/5 hover:text-white"
         }`
       }
     >
@@ -37,7 +49,7 @@ function NavItemMobile({ to, label, Icon, end }) {
       end={end}
       className={({ isActive }) =>
         `flex flex-col items-center justify-center gap-0.5 flex-1 py-2.5 text-[11px] font-semibold transition-colors ${
-          isActive ? "text-neon-pink" : "text-white/40"
+          isActive ? "text-neon-pinklight" : "text-white/40"
         }`
       }
     >
@@ -58,10 +70,9 @@ export default function Shell() {
   return (
     <div className="min-h-screen flex">
       {/* Sidebar desktop */}
-      <aside className="hidden md:flex md:flex-col w-64 shrink-0 border-r border-white/10 p-5 gap-1">
-        <div className="flex items-center gap-2 mb-6 px-1">
-          <span className="text-2xl animate-pulseGlow">🎤</span>
-          <h1 className="title-glow text-xl">KaraokeTandem</h1>
+      <aside className="hidden md:flex md:flex-col w-72 shrink-0 border-r border-white/[0.08] bg-ink-900/55 backdrop-blur-xl p-5 gap-1 sticky top-0 h-screen">
+        <div className="mb-7 px-2 pt-2">
+          <Brand />
         </div>
         {NAV_ITEMS.map((item) => (
           <NavItemDesktop key={item.to} {...item} />
@@ -70,7 +81,7 @@ export default function Shell() {
           to="/grupo"
           className={({ isActive }) =>
             `flex items-center gap-3 px-4 py-3 rounded-xl font-display font-semibold text-sm transition-colors ${
-              isActive ? "bg-gradient-to-r from-neon-purple/80 to-neon-pink/80 text-white shadow-neon-sm" : "text-white/60 hover:bg-white/5 hover:text-white"
+              isActive ? "bg-white/[0.09] border border-white/10 text-white shadow-neon-sm" : "border border-transparent text-white/55 hover:bg-white/5 hover:text-white"
             }`
           }
         >
@@ -83,7 +94,7 @@ export default function Shell() {
           to="/local"
           className={({ isActive }) =>
             `flex items-center gap-3 px-4 py-3 rounded-xl font-display font-semibold text-sm transition-colors ${
-              isActive ? "bg-gradient-to-r from-neon-purple/80 to-neon-pink/80 text-white shadow-neon-sm" : "text-white/60 hover:bg-white/5 hover:text-white"
+              isActive ? "bg-white/[0.09] border border-white/10 text-white shadow-neon-sm" : "border border-transparent text-white/55 hover:bg-white/5 hover:text-white"
             }`
           }
         >
@@ -91,7 +102,7 @@ export default function Shell() {
           {grupo?.modo === "salon" ? "Mesas" : "Modo salón"}
         </NavLink>
         <div className="mt-auto pt-4 border-t border-white/10 flex items-center gap-3 px-1">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-neon-purple to-neon-pink flex items-center justify-center font-display font-bold text-sm shrink-0">
+          <div className="w-9 h-9 rounded-full bg-neon-pink flex items-center justify-center font-display font-bold text-sm shrink-0 shadow-neon-sm">
             {usuario?.nombre?.[0]?.toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">
@@ -106,27 +117,24 @@ export default function Shell() {
 
       {/* Contenido */}
       <div className="flex-1 min-w-0 flex flex-col">
-        <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-white/10 sticky top-0 bg-ink-950/90 backdrop-blur z-40">
-          <div className="flex items-center gap-2">
-            <span className="text-xl">🎤</span>
-            <h1 className="title-glow text-lg">KaraokeTandem</h1>
-          </div>
+        <header className="md:hidden flex items-center justify-between px-4 py-3.5 border-b border-white/[0.08] sticky top-0 bg-ink-950/85 backdrop-blur-xl z-40">
+          <Brand compact />
           <div className="flex items-center gap-2">
             <NavLink to="/grupo" className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white/60">
               <IconUsers />
             </NavLink>
-            <button onClick={salir} className="w-8 h-8 rounded-full bg-gradient-to-br from-neon-purple to-neon-pink flex items-center justify-center font-display font-bold text-xs">
+            <button onClick={salir} className="w-8 h-8 rounded-full bg-neon-pink flex items-center justify-center font-display font-bold text-xs shadow-neon-sm" aria-label="Cambiar de usuario">
               {usuario?.nombre?.[0]?.toUpperCase()}
             </button>
           </div>
         </header>
 
-        <main className="flex-1 min-w-0 p-4 md:p-8 pb-24 md:pb-8 max-w-5xl w-full mx-auto">
+        <main className="flex-1 min-w-0 p-4 md:p-10 pb-24 md:pb-10 max-w-6xl w-full mx-auto">
           <Outlet />
         </main>
 
         {/* Bottom nav mobile */}
-        <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 flex bg-ink-900/95 backdrop-blur border-t border-white/10 pb-[env(safe-area-inset-bottom)]">
+        <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 flex bg-ink-900/90 backdrop-blur-xl border-t border-white/10 pb-[env(safe-area-inset-bottom)] shadow-[0_-12px_32px_rgba(0,0,0,.28)]">
           {NAV_ITEMS.map((item) => (
             <NavItemMobile key={item.to} {...item} />
           ))}

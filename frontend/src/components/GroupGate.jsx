@@ -62,20 +62,27 @@ export default function GroupGate({ children }) {
   }
 
   return (
-    <div className="min-h-screen relative flex flex-col justify-end overflow-hidden">
+    <div className="min-h-screen relative flex items-end lg:items-center overflow-hidden">
       <img
         src="/images/portada.webp"
         alt="KaraokeTandem — canta juntos, conecta"
         fetchpriority="high"
-        className="absolute inset-0 w-full h-full object-cover object-top"
+        className="absolute inset-0 w-full h-full object-cover object-[52%_top] lg:object-center scale-[1.02]"
       />
-      <div className="absolute inset-0 bg-gradient-to-t from-ink-950 via-ink-950/75 to-transparent" />
+      <div className="absolute inset-0 bg-gradient-to-t from-ink-950 via-ink-950/70 to-ink-950/10 lg:bg-gradient-to-r lg:from-ink-950/15 lg:via-ink-950/25 lg:to-ink-950" />
       <h1 className="sr-only">KaraokeTandem</h1>
 
-      <div className="relative w-full max-w-sm mx-auto p-6 pt-10 text-center">
-        <p className="text-white/60 text-sm mb-6">Crea la sala de tu grupo o únete con un código</p>
+      <div className="relative w-full lg:w-[31rem] lg:ml-auto lg:mr-[8vw] p-5 sm:p-7 lg:p-0 pb-8">
+        <div className="mb-6">
+          <div className="flex items-center gap-3 mb-4">
+            <span className="equalizer" aria-hidden="true"><i /><i /><i /><i /></span>
+            <p className="eyebrow">Tu karaoke, tu grupo</p>
+          </div>
+          <h2 className="font-display font-bold text-4xl sm:text-5xl tracking-[-0.055em] leading-[0.95]">Que empiece<br /><span className="text-neon-pinklight">la noche.</span></h2>
+          <p className="text-white/55 text-sm mt-4 max-w-sm">Arma la sala, suma a tus amigos y deja que la música decida quién sigue.</p>
+        </div>
 
-        <div className="flex gap-2 mb-4">
+        <div className="flex gap-1 mb-3 p-1 rounded-xl bg-ink-950/55 border border-white/10 backdrop-blur-xl">
           <button
             onClick={() => setModo("crear")}
             className={modo === "crear" ? "chip-active flex-1" : "chip flex-1"}
@@ -91,10 +98,11 @@ export default function GroupGate({ children }) {
         </div>
 
         {modo === "crear" ? (
-          <form onSubmit={onCrear} className="card p-5 flex flex-col gap-3">
+          <form onSubmit={onCrear} className="card p-5 sm:p-6 flex flex-col gap-4">
             <div className="text-left">
-              <label className="label">Nombre del grupo</label>
+              <label htmlFor="nombre-grupo" className="label">Nombre del grupo</label>
               <input
+                id="nombre-grupo"
                 className="input"
                 placeholder="Ej: Amigos del barrio"
                 value={nombreGrupo}
@@ -104,8 +112,9 @@ export default function GroupGate({ children }) {
               />
             </div>
             <div className="text-left">
-              <label className="label">Tu nombre</label>
+              <label htmlFor="tu-nombre" className="label">Tu nombre</label>
               <input
+                id="tu-nombre"
                 className="input"
                 placeholder="¿Cómo te llamas?"
                 value={tuNombre}
@@ -114,15 +123,16 @@ export default function GroupGate({ children }) {
               />
             </div>
             <button className="btn-primary w-full mt-1" disabled={loading || !nombreGrupo.trim() || !tuNombre.trim()}>
-              {loading ? "Creando…" : "Crear grupo 🎤"}
+              {loading ? "Creando…" : "Crear sala"}
             </button>
             {error && <p className="text-red-300 text-sm">{error}</p>}
           </form>
         ) : (
-          <form onSubmit={onUnirse} className="card p-5 flex flex-col gap-3">
+          <form onSubmit={onUnirse} className="card p-5 sm:p-6 flex flex-col gap-4">
             <div className="text-left">
-              <label className="label">Código de invitación</label>
+              <label htmlFor="codigo-invitacion" className="label">Código de invitación</label>
               <input
+                id="codigo-invitacion"
                 className="input text-center text-lg tracking-[0.3em]"
                 placeholder="000000"
                 value={codigo}
@@ -133,7 +143,7 @@ export default function GroupGate({ children }) {
               />
             </div>
             <button className="btn-primary w-full mt-1" disabled={loading || codigo.length !== 6}>
-              {loading ? "Entrando…" : "Unirme 🎉"}
+              {loading ? "Entrando…" : "Entrar a la sala"}
             </button>
             {error && <p className="text-red-300 text-sm">{error}</p>}
           </form>
