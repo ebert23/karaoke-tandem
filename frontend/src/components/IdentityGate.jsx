@@ -20,7 +20,7 @@ export default function IdentityGate({ children }) {
   return (
     <div className="min-h-screen relative flex items-end lg:items-center overflow-hidden">
       <img
-        src="/images/portada.webp"
+        src="/images/portada-v2.png"
         alt="KaraokeTandem — canta juntos, conecta"
         fetchpriority="high"
         className="absolute inset-0 w-full h-full object-cover object-[52%_top] lg:object-center scale-[1.02]"
