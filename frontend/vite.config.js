@@ -7,7 +7,10 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: "autoUpdate",
+      // El registro manual en main.jsx permite recargar la pestaña apenas
+      // una versión nueva queda lista, en vez de dejar abierta la UI vieja.
+      registerType: "prompt",
+      injectRegister: false,
       includeAssets: ["icons/icon.svg", "icons/apple-touch-icon-180.png"],
       manifest: {
         name: "KaraokeTandem",
