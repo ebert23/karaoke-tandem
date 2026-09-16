@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from . import db
 from .config import settings
 from .routers import (
-    canciones, colecciones, grupos, health, ranking, retos, salon, sesiones,
+    canciones, colecciones, cron, grupos, health, ranking, retos, salon, sesiones,
     stats, usuarios, youtube,
 )
 
@@ -65,6 +65,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 
 app.include_router(health.router)
+app.include_router(cron.router)
 app.include_router(grupos.router)
 app.include_router(canciones.router)
 app.include_router(colecciones.router)

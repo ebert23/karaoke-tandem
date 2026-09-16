@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     # transacción/pgbouncer) — ver backend/db/schema.sql.
     database_url: str = ""
 
+    # Vercel lo envía como Bearer token al ejecutar los cron jobs.
+    cron_secret: str = ""
+
     # Opcional: habilita la búsqueda de canciones en YouTube al agregarlas.
     # Sin esta key, el buscador simplemente no se muestra en el frontend.
     youtube_api_key: str = ""
